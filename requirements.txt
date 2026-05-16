@@ -4,3 +4,4 @@ yt-dlp
 demucs
 beautifulsoup4
 torchcodec
+librosa

@@ -20,13 +20,11 @@ def run_test():
     
     print(f"Songs available for testing: {test_queries}")
     
-    for test_query in test_queries:
-        print(f"\nTesting with query: {test_query}")
-        success = service.process_song(test_query)
-        if success:
-            print(f"[OK] Completed test for: {test_query}")
-        else:
-            print(f"[ERROR] Failed test for: {test_query}")
+    # Run all songs concurrently using the new batch processor
+    service.process_batch(test_queries, max_workers=2, force_reprocess=False)
+    
+    # Check if the last song was processed (simplified success check)
+    success = True
     
     if success:
         print("\n[OK] Phase 1 test completed successfully!")

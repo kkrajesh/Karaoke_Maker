@@ -7,7 +7,9 @@ from pathlib import Path
 from bs4 import BeautifulSoup
 import requests
 import yt_dlp
+import concurrent.futures
 from .config import get_preferred_domains
+from .pitch_analyzer import PitchAnalyzer
 
 def sanitize_filename(name):
     # Remove characters not allowed in Windows filenames
@@ -148,62 +150,78 @@ class MakerService:
             return None, None
 
     def separate_audio(self, song_id, actual_url):
-        """Uses Demucs to split the downloaded original.wav into vocals and instrumental."""
+        """Uses Demucs to split the downloaded original.wav into vocals and instrumental, then runs Pitch Analysis."""
         target_dir = os.path.join(self.hot_zone, song_id)
         original_mp3 = os.path.join(target_dir, "original.wav")
+        final_vocals = os.path.join(target_dir, "vocals.wav")
+        final_instrumental = os.path.join(target_dir, "instrumental.wav")
+        pitch_json_path = os.path.join(target_dir, "pitch_profile.json")
         
-        if not os.path.exists(original_mp3):
-            self.log(song_id, f"[ERROR] original.wav not found for SongID: {song_id}")
-            return False
-            
-        self.log(song_id, f"[WAIT] Starting Demucs separation for {song_id} (This may take a while)...")
-        
-        # Command to run our custom demucs wrapper that bypasses torchcodec
-        run_demucs_script = os.path.join(os.path.dirname(__file__), "run_demucs.py")
-        cmd = [
-            "py",
-            run_demucs_script,
-            "--two-stems=vocals",
-            "-o", target_dir,
-            original_mp3
-        ]
-        
-        try:
-            subprocess.run(cmd, check=True)
-            self.log(song_id, "[OK] Demucs separation completed.")
-            
-            # Demucs places outputs in target_dir/htdemucs/original/...
-            demucs_out_dir = os.path.join(target_dir, "htdemucs", "original")
-            vocals_wav = os.path.join(demucs_out_dir, "vocals.wav")
-            instrumental_wav = os.path.join(demucs_out_dir, "no_vocals.wav")
-            
-            final_vocals = os.path.join(target_dir, "vocals.wav")
-            final_instrumental = os.path.join(target_dir, "instrumental.wav")
-            
-            # Move the files to the root of the song's directory and embed metadata
-            if os.path.exists(vocals_wav):
-                shutil.move(vocals_wav, final_vocals)
-                self.log(song_id, f"[OK] Created vocals.wav")
-                self.embed_metadata(final_vocals, actual_url)
+        # --- 1. Demucs Separation ---
+        if not (os.path.exists(final_vocals) and os.path.exists(final_instrumental)):
+            if not os.path.exists(original_mp3):
+                self.log(song_id, f"[ERROR] original.wav not found for SongID: {song_id}")
+                return False
                 
-            if os.path.exists(instrumental_wav):
-                shutil.move(instrumental_wav, final_instrumental)
-                self.log(song_id, f"[OK] Created instrumental.wav")
-                self.embed_metadata(final_instrumental, actual_url)
+            self.log(song_id, f"[WAIT] Starting Demucs separation for {song_id} (This may take a while)...")
+            
+            # Command to run our custom demucs wrapper that bypasses torchcodec
+            run_demucs_script = os.path.join(os.path.dirname(__file__), "run_demucs.py")
+            cmd = [
+                "py",
+                run_demucs_script,
+                "--two-stems=vocals",
+                "-o", target_dir,
+                original_mp3
+            ]
+            
+            try:
+                subprocess.run(cmd, check=True)
+                self.log(song_id, "[OK] Demucs separation completed.")
                 
-            # Cleanup the temporary htdemucs folder
-            htdemucs_dir = os.path.join(target_dir, "htdemucs")
-            if os.path.exists(htdemucs_dir):
-                shutil.rmtree(htdemucs_dir, ignore_errors=True)
+                # Demucs places outputs in target_dir/htdemucs/original/...
+                demucs_out_dir = os.path.join(target_dir, "htdemucs", "original")
+                vocals_wav = os.path.join(demucs_out_dir, "vocals.wav")
+                instrumental_wav = os.path.join(demucs_out_dir, "no_vocals.wav")
+                
+                # Move the files to the root of the song's directory and embed metadata
+                if os.path.exists(vocals_wav):
+                    shutil.move(vocals_wav, final_vocals)
+                    self.log(song_id, f"[OK] Created vocals.wav")
+                    self.embed_metadata(final_vocals, actual_url)
+                    
+                if os.path.exists(instrumental_wav):
+                    shutil.move(instrumental_wav, final_instrumental)
+                    self.log(song_id, f"[OK] Created instrumental.wav")
+                    self.embed_metadata(final_instrumental, actual_url)
+                    
+                # Cleanup the temporary htdemucs folder
+                htdemucs_dir = os.path.join(target_dir, "htdemucs")
+                if os.path.exists(htdemucs_dir):
+                    shutil.rmtree(htdemucs_dir, ignore_errors=True)
+                    
+            except subprocess.CalledProcessError as e:
+                self.log(song_id, f"[ERROR] Demucs subprocess failed: {e}")
+                return False
+            except Exception as e:
+                self.log(song_id, f"[ERROR] Separation failed: {e}")
+                return False
+        else:
+            self.log(song_id, f"[INFO] vocals.wav and instrumental.wav already exist. Skipping Demucs separation.")
             
-            return True
+        # --- 2. Pitch Analysis (Phase 2) ---
+        if os.path.exists(final_vocals) and not os.path.exists(pitch_json_path):
+            self.log(song_id, f"[WAIT] Starting Pitch Analysis on vocals.wav...")
+            try:
+                analyzer = PitchAnalyzer(fps=50)
+                analyzer.analyze(final_vocals, pitch_json_path)
+            except Exception as e:
+                self.log(song_id, f"[ERROR] PitchAnalyzer failed: {e}")
+                return False
+        elif os.path.exists(pitch_json_path):
+            self.log(song_id, f"[INFO] pitch_profile.json already exists. Skipping Pitch Analysis.")
             
-        except subprocess.CalledProcessError as e:
-            self.log(song_id, f"[ERROR] Demucs subprocess failed: {e}")
-            return False
-        except Exception as e:
-            self.log(song_id, f"[ERROR] Separation failed: {e}")
-            return False
+        return True
 
     def process_song(self, song_query, force_reprocess=False):
         """Main workflow: Search -> Download -> Separate."""
@@ -215,7 +233,9 @@ class MakerService:
         song_id_check = sanitize_filename(song_query).replace(" ", "_")
         target_dir = os.path.join(self.hot_zone, song_id_check)
         if not force_reprocess and os.path.exists(target_dir):
-            if os.path.exists(os.path.join(target_dir, "vocals.wav")) and os.path.exists(os.path.join(target_dir, "instrumental.wav")):
+            if (os.path.exists(os.path.join(target_dir, "vocals.wav")) and 
+                os.path.exists(os.path.join(target_dir, "instrumental.wav")) and
+                os.path.exists(os.path.join(target_dir, "pitch_profile.json"))):
                 self.log(song_id_check, f"[INFO] '{song_query}' is already fully processed. Skipping.")
                 return True
         elif force_reprocess:
@@ -234,3 +254,24 @@ class MakerService:
         else:
             self.log(song_id, "[ERROR] Processing failed during separation.")
             return False
+
+    def process_batch(self, song_queries, max_workers=2, force_reprocess=False):
+        """Processes a list of songs concurrently using a ThreadPoolExecutor."""
+        self.log(None, f"\n=== Starting Batch Processing for {len(song_queries)} songs ===")
+        
+        # We use max_workers=2 by default so one thread can download while the other is running Demucs
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(self.process_song, q, force_reprocess): q for q in song_queries}
+            
+            for future in concurrent.futures.as_completed(futures):
+                query = futures[future]
+                try:
+                    success = future.result()
+                    if success:
+                        self.log(None, f"[BATCH OK] Finished: {query}")
+                    else:
+                        self.log(None, f"[BATCH ERROR] Failed: {query}")
+                except Exception as e:
+                    self.log(None, f"[BATCH EXCEPTION] Error processing '{query}': {e}")
+        
+        self.log(None, f"=== Batch Processing Complete ===\n")
