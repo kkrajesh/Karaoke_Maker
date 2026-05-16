@@ -43,6 +43,16 @@ def verify_onedrive():
         print(f"[ERROR] OneDrive Hot Zone NOT found at: {onedrive_path}")
         return False
 
+def get_preferred_domains():
+    domains_str = os.getenv("PREFERRED_AUDIO_DOMAINS", "")
+    if domains_str:
+        domains = [d.strip() for d in domains_str.split(",") if d.strip()]
+        print(f"[OK] Preferred Audio Domains: {', '.join(domains)}")
+        return domains
+    else:
+        print("[INFO] No Preferred Audio Domains specified. Will default to YouTube.")
+        return []
+
 def verify_llm_connectivity():
     llm_base_url = os.getenv("LLM_BASE_URL")
     if not llm_base_url:
@@ -83,6 +93,7 @@ if __name__ == "__main__":
     
     ffmpeg_ok = verify_ffmpeg()
     onedrive_ok = verify_onedrive()
+    preferred_domains = get_preferred_domains()
     
     print("-" * 37)
     llm_ok = verify_llm_connectivity()
