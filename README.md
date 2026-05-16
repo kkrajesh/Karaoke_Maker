@@ -12,6 +12,8 @@ Karaoke Maker is an automated pipeline designed to search, download, and process
 - **Idempotent Processing**: Automatically skips songs that have already been separated unless forcefully requested.
 - **Concurrent Pipeline**: Employs thread-pool execution to download new songs in parallel while previous songs undergo heavy CPU separation and analysis.
 - **Mathematical Pitch Profiling**: Uses `librosa.pyin` to extract the fundamental frequency ($F_0$) of vocals at 50 FPS and estimates the song's root Tonic (Sa). Outputs a highly compact JSON payload.
+- **Agentic Audio Vetting**: Utilizes a Local LLM to rank and choose the highest-quality authentic Studio Version from search results, actively rejecting covers and live performances.
+- **Intelligent Lyric Scraper**: Concurrently fetches lyrics via LRCLib, falls back to web scraping (DuckDuckGo/YouTube), and uses the Local LLM to automatically extract and transliterate native Indian scripts into English characters.
 
 ## 🛠️ Tech Stack
 
@@ -19,8 +21,9 @@ Karaoke Maker is an automated pipeline designed to search, download, and process
 - **Audio Download**: `yt-dlp`
 - **AI Separation**: `demucs`, `PyTorch`
 - **Pitch Analysis**: `librosa`, `numpy`
+- **Agentic Intelligence**: `openai` (Local LLM via LM Studio)
 - **Audio Manipulation**: `soundfile`, `FFmpeg`
-- **Web Scraping**: `beautifulsoup4`, `requests`
+- **Web Scraping**: `beautifulsoup4`, `duckduckgo-search`
 
 ## ⚙️ Setup & Installation
 
@@ -33,18 +36,22 @@ Karaoke Maker is an automated pipeline designed to search, download, and process
    - Update `FFMPEG_PATH` to point to your `ffmpeg.exe`.
    - Customize `PREFERRED_AUDIO_DOMAINS` to prioritize specific sites.
 4. **Install Python Dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-   *(Note: The `torchcodec` dependency is natively bypassed on Windows using the `soundfile` library via `core_engine/run_demucs.py`)*
+    ```bash
+    pip install -r requirements.txt
+    pip install duckduckgo-search googlesearch-python
+    ```
+    *(Note: The `torchcodec` dependency is natively bypassed on Windows using the `soundfile` library via `core_engine/run_demucs.py`)*
+
+5. **Start Local LLM (Optional but Recommended)**
+   - Open LM Studio or Ollama and start the local server on `http://localhost:1234/v1`. This powers the Audio Vetting and Lyric Transliteration features.
 
 ## 🏃 Execution Instructions
 
-Currently, the pipeline is verified using the `test_phase1.py` script, which processes a queue of Indian songs.
+Currently, the pipeline is verified using the `test_pipeline.py` script, which processes a queue of Indian songs concurrently.
 
 To start processing the queue:
 ```bash
-python test_phase1.py
+python test_pipeline.py
 ```
 
 ### Outputs
@@ -53,13 +60,15 @@ For each song, the system creates a dedicated folder in your `ONEDRIVE_HOT_ZONE`
 - `vocals.wav` (The separated vocal track)
 - `instrumental.wav` (The separated karaoke track)
 - `pitch_profile.json` (F0 extraction points mapping the vocals)
-- `debug.log` (A local log detailing the entire extraction and separation process)
+- `lyrics_native.lrc/.txt` (Synchronized or raw lyrics in native script)
+- `lyrics_english.lrc/.txt` (LLM-transliterated English lyrics)
+- `debug.log` (A local log detailing the LLM decisions, extraction, and separation process)
 
 ## 🗺️ Roadmap
 
 - **Phase 1**: High-Fidelity Audio Extraction (✅ Complete)
 - **Phase 2**: Mathematical Pitch Profiling (✅ Complete)
-- **Phase 3**: Agentic Vetting & Lyrics (In Progress)
+- **Phase 3**: Agentic Vetting & Lyrics (✅ Complete)
 - **Phase 4**: Flutter Practice Dashboard
 - **Phase 5**: Live Pitch Visualizer Engine
 - **Phase 6**: "Karaoke Night Live" Integration

@@ -2,20 +2,14 @@ from core_engine.maker_service import MakerService
 from core_engine.config import verify_ffmpeg, verify_onedrive, get_preferred_domains
 
 def run_test():
-    print("Running Phase 1 Test...")
+    print("Running Phase 3 Pipeline Test (Agentic Vetting & Lyrics)...")
     service = MakerService()
     
     # We will test with a specific URL or query.
-    # Test with a selection of Indian songs as requested
+    # Test with complex queries designed to trigger LLM disambiguation
     test_queries = [
-        "Azhagiya Laila (Tamil)",
-        "Nattu Nattu RRR (Telugu)",
-        "Darshana Hridayam (Malayalam)",
-        "Chaleya Jawan (Hindi)",
-        "Kaattuchembakam",
-        "Raathu Raasan",
-        "Main Aur Tu",
-        "Sooseki"
+        "Kadhale Kadhale (Tamil) - 96 Movie",
+        "Shape of You - Cover vs Original"
     ]
     
     print(f"Songs available for testing: {test_queries}")

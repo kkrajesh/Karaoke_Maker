@@ -5,11 +5,13 @@ import urllib.parse
 import re
 from pathlib import Path
 from bs4 import BeautifulSoup
-import requests
 import yt_dlp
 import concurrent.futures
+import threading
 from .config import get_preferred_domains
 from .pitch_analyzer import PitchAnalyzer
+from .agents.audio_agent import AudioAgent
+from .agents.lyric_agent import LyricAgent
 
 def sanitize_filename(name):
     # Remove characters not allowed in Windows filenames
@@ -72,21 +74,23 @@ class MakerService:
             response = requests.get(url, headers=headers, timeout=10)
             if response.status_code == 200:
                 soup = BeautifulSoup(response.text, 'html.parser')
-                # Find the first real result link
-                for a in soup.find_all('a', class_='result__url'):
-                    href = a.get('href')
-                    if href and domain in href:
-                        return href.strip()
+                results = soup.find_all('div', class_='result')
+                for res in results:
+                    a_tag = res.find('a', class_='result__url')
+                    title_tag = res.find('h2', class_='result__title')
+                    if a_tag and title_tag:
+                        href = a_tag.get('href', '').strip()
+                        if domain in href:
+                            if not href.startswith("http"):
+                                href = "https://" + href
+                            return {"title": title_tag.text.strip(), "url": href}
         except Exception as e:
             print(f"[ERROR] Failed to search {domain}: {e}")
         return None
 
-    def search_and_download_audio(self, song_query):
-        """Searches for the song on preferred domains, falls back to YouTube, and downloads it."""
-        # Clean up song_id to be a valid folder name
-        song_id = sanitize_filename(song_query).replace(" ", "_")
-        target_dir = os.path.join(self.hot_zone, song_id)
-        os.makedirs(target_dir, exist_ok=True)
+    def search_and_download_audio(self, song_query, target_dir):
+        """Searches for the song, uses AudioAgent to pick the best, and downloads it."""
+        song_id = os.path.basename(target_dir)
         
         target_mp3 = os.path.join(target_dir, "original.wav")
         
@@ -95,22 +99,42 @@ class MakerService:
             download_url = song_query
             self.log(song_id, f"[INFO] Using direct URL: {download_url}")
         else:
-            download_url = None
-            # Search the configurable preferred domains first
+            search_results = []
+            
+            # 1. Search preferred domains
             for domain in self.domains:
                 self.log(song_id, f"[WAIT] Searching '{song_query}' on {domain}...")
-                found_url = self.search_duckduckgo(song_query, domain)
-                if found_url:
-                    if not found_url.startswith("http"):
-                        found_url = "https://" + found_url
-                    self.log(song_id, f"[OK] Found match on {domain}: {found_url}")
-                    download_url = found_url
-                    break
+                res = self.search_duckduckgo(song_query, domain)
+                if res:
+                    search_results.append(res)
             
-            # Fallback to YouTube if nothing was found
-            if not download_url:
-                self.log(song_id, f"[INFO] No results found on preferred domains. Falling back to YouTube search...")
-                download_url = f"ytsearch1:{song_query}"
+            # 2. Search YouTube (Top 3)
+            self.log(song_id, f"[WAIT] Fetching top YouTube results...")
+            ydl_opts_search = {'quiet': True, 'extract_flat': True}
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts_search) as ydl:
+                    info = ydl.extract_info(f"ytsearch3:{song_query}", download=False)
+                    if 'entries' in info:
+                        for entry in info['entries']:
+                            search_results.append({
+                                "title": entry.get('title', 'Unknown YouTube Video'),
+                                "url": entry.get('url', entry.get('webpage_url', ''))
+                            })
+            except Exception as e:
+                self.log(song_id, f"[WARN] YouTube search failed: {e}")
+                
+            # 3. Agentic Vetting
+            self.log(song_id, f"[WAIT] AudioAgent is vetting {len(search_results)} results...")
+            audio_agent = AudioAgent()
+            best_url, reason = audio_agent.pick_best_source(song_query, search_results)
+            
+            if not best_url:
+                self.log(song_id, "[ERROR] AudioAgent failed to find a valid source.")
+                return None, None
+                
+            self.log(song_id, f"[OK] AudioAgent chose: {best_url}")
+            self.log(song_id, f"     Reason: {reason}")
+            download_url = best_url
         
         # yt-dlp Configuration
         ydl_opts = {
@@ -232,6 +256,8 @@ class MakerService:
         # Check if already processed
         song_id_check = sanitize_filename(song_query).replace(" ", "_")
         target_dir = os.path.join(self.hot_zone, song_id_check)
+        os.makedirs(target_dir, exist_ok=True)
+        
         if not force_reprocess and os.path.exists(target_dir):
             if (os.path.exists(os.path.join(target_dir, "vocals.wav")) and 
                 os.path.exists(os.path.join(target_dir, "instrumental.wav")) and
@@ -241,19 +267,37 @@ class MakerService:
         elif force_reprocess:
             self.log(song_id_check, f"[INFO] Force re-processing enabled for '{song_query}'.")
         
-        song_id, actual_url = self.search_and_download_audio(song_query)
+        # We can fire the LyricAgent in a separate thread for concurrency within the song processing
+        lyric_thread = threading.Thread(target=self._fetch_lyrics, args=(song_id_check, song_query, target_dir))
+        lyric_thread.start()
+        
+        song_id, actual_url = self.search_and_download_audio(song_query, target_dir)
         if not song_id:
             print("[ERROR] Processing aborted. Audio download failed.")
+            lyric_thread.join()
             return False
             
         success = self.separate_audio(song_id, actual_url)
+        lyric_thread.join() # Ensure lyrics are done before we declare total success
+        
         if success:
             self.log(song_id, f"\n[DONE] Successfully processed '{song_query}'.")
-            self.log(song_id, f"       Files saved to: {os.path.join(self.hot_zone, song_id)}")
+            self.log(song_id, f"       Files saved to: {target_dir}")
             return True
         else:
             self.log(song_id, "[ERROR] Processing failed during separation.")
             return False
+
+    def _fetch_lyrics(self, song_id, song_query, target_dir):
+        """Helper to run LyricAgent."""
+        def lyric_logger(msg):
+            self.log(song_id, msg)
+            
+        try:
+            agent = LyricAgent()
+            agent.fetch_and_save(song_query, target_dir, log_callback=lyric_logger)
+        except Exception as e:
+            self.log(song_id, f"[WARN] Lyric thread failed: {e}")
 
     def process_batch(self, song_queries, max_workers=2, force_reprocess=False):
         """Processes a list of songs concurrently using a ThreadPoolExecutor."""

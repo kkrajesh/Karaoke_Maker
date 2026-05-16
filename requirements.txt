@@ -5,3 +5,5 @@ demucs
 beautifulsoup4
 torchcodec
 librosa
+openai
+lyricsgenius
