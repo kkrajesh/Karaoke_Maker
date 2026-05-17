@@ -1,0 +1,97 @@
+import os
+import sys
+import threading
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+from dotenv import load_dotenv
+
+# Add parent dir to sys.path to resolve module imports properly
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Load env before importing services
+load_dotenv()
+
+from core_engine.maker_service import MakerService
+from core_engine.agents.lyric_agent import LyricAgent
+
+app = Flask(__name__)
+CORS(app)
+
+maker = MakerService()
+lyric_agent = LyricAgent()
+
+# In-memory store for background tasks
+tasks = {}
+
+@app.route('/search', methods=['GET'])
+def search():
+    query = request.args.get('q')
+    if not query:
+        return jsonify({"error": "Query parameter 'q' is required"}), 400
+        
+    try:
+        results = maker.get_search_results(query)
+        return jsonify({"results": results})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/lyrics', methods=['GET'])
+def fetch_lyrics():
+    query = request.args.get('q')
+    if not query:
+        return jsonify({"error": "Query parameter 'q' is required"}), 400
+        
+    try:
+        # We don't save it yet, just fetch
+        lyrics = lyric_agent.fetch_lyrics(query)
+        return jsonify({"lyrics": lyrics})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/process', methods=['POST'])
+def process_song():
+    data = request.json
+    song_id = data.get('song_id')
+    url = data.get('url')
+    local_audio_path = data.get('local_audio_path')
+    lyrics_text = data.get('lyrics_text')
+    lyrics_type = data.get('lyrics_type', 'txt')
+    
+    if not song_id:
+        return jsonify({"error": "song_id is required"}), 400
+        
+    if not url and not local_audio_path:
+        return jsonify({"error": "Either url or local_audio_path is required"}), 400
+
+    task_id = song_id
+    tasks[task_id] = {"status": "processing"}
+
+    def run_task():
+        try:
+            success = maker.process_specific_song(
+                song_id=song_id,
+                url=url,
+                local_audio_path=local_audio_path,
+                lyrics_text=lyrics_text,
+                lyrics_type=lyrics_type
+            )
+            tasks[task_id] = {"status": "completed" if success else "failed"}
+        except Exception as e:
+            print(f"Task error: {e}")
+            tasks[task_id] = {"status": "failed", "error": str(e)}
+
+    thread = threading.Thread(target=run_task)
+    thread.start()
+    
+    return jsonify({"message": "Processing started", "task_id": task_id})
+
+@app.route('/status/<task_id>', methods=['GET'])
+def get_status(task_id):
+    task = tasks.get(task_id)
+    if not task:
+        return jsonify({"error": "Task not found"}), 404
+    return jsonify(task)
+
+if __name__ == '__main__':
+    print("Starting Karaoke Maker API Server on port 5000...")
+    app.run(host='127.0.0.1', port=5000, debug=False)

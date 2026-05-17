@@ -88,55 +88,47 @@ class MakerService:
             print(f"[ERROR] Failed to search {domain}: {e}")
         return None
 
-    def search_and_download_audio(self, song_query, target_dir):
-        """Searches for the song, uses AudioAgent to pick the best, and downloads it."""
-        song_id = os.path.basename(target_dir)
+    def get_search_results(self, song_query):
+        """Returns a list of search results, with the AudioAgent's top pick indicated."""
+        search_results = []
         
+        # 1. Search preferred domains
+        for domain in self.domains:
+            res = self.search_duckduckgo(song_query, domain)
+            if res:
+                search_results.append(res)
+        
+        # 2. Search YouTube (Top 3)
+        ydl_opts_search = {'quiet': True, 'extract_flat': True}
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts_search) as ydl:
+                info = ydl.extract_info(f"ytsearch3:{song_query}", download=False)
+                if 'entries' in info:
+                    for entry in info['entries']:
+                        search_results.append({
+                            "title": entry.get('title', 'Unknown YouTube Video'),
+                            "url": entry.get('url', entry.get('webpage_url', ''))
+                        })
+        except Exception as e:
+            print(f"[WARN] YouTube search failed: {e}")
+            
+        # 3. Agentic Vetting
+        audio_agent = AudioAgent()
+        best_url, reason = audio_agent.pick_best_source(song_query, search_results)
+        
+        # Mark the recommended one
+        for res in search_results:
+            if res['url'] == best_url:
+                res['recommended'] = True
+                res['reason'] = reason
+            else:
+                res['recommended'] = False
+                
+        return search_results
+
+    def download_audio(self, download_url, target_dir, song_id):
+        """Downloads audio from a specific URL."""
         target_mp3 = os.path.join(target_dir, "original.wav")
-        
-        # If input is already a direct URL
-        if song_query.startswith("http://") or song_query.startswith("https://"):
-            download_url = song_query
-            self.log(song_id, f"[INFO] Using direct URL: {download_url}")
-        else:
-            search_results = []
-            
-            # 1. Search preferred domains
-            for domain in self.domains:
-                self.log(song_id, f"[WAIT] Searching '{song_query}' on {domain}...")
-                res = self.search_duckduckgo(song_query, domain)
-                if res:
-                    search_results.append(res)
-            
-            # 2. Search YouTube (Top 3)
-            self.log(song_id, f"[WAIT] Fetching top YouTube results...")
-            ydl_opts_search = {'quiet': True, 'extract_flat': True}
-            try:
-                with yt_dlp.YoutubeDL(ydl_opts_search) as ydl:
-                    info = ydl.extract_info(f"ytsearch3:{song_query}", download=False)
-                    if 'entries' in info:
-                        for entry in info['entries']:
-                            search_results.append({
-                                "title": entry.get('title', 'Unknown YouTube Video'),
-                                "url": entry.get('url', entry.get('webpage_url', ''))
-                            })
-            except Exception as e:
-                self.log(song_id, f"[WARN] YouTube search failed: {e}")
-                
-            # 3. Agentic Vetting
-            self.log(song_id, f"[WAIT] AudioAgent is vetting {len(search_results)} results...")
-            audio_agent = AudioAgent()
-            best_url, reason = audio_agent.pick_best_source(song_query, search_results)
-            
-            if not best_url:
-                self.log(song_id, "[ERROR] AudioAgent failed to find a valid source.")
-                return None, None
-                
-            self.log(song_id, f"[OK] AudioAgent chose: {best_url}")
-            self.log(song_id, f"     Reason: {reason}")
-            download_url = best_url
-        
-        # yt-dlp Configuration
         ydl_opts = {
             'format': 'bestaudio/best',
             'outtmpl': os.path.join(target_dir, 'original.%(ext)s'),
@@ -153,8 +145,6 @@ class MakerService:
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info_dict = ydl.extract_info(download_url, download=True)
-                
-                # Extract the actual webpage URL from yt-dlp info (useful if it was a ytsearch)
                 actual_url = download_url
                 if 'entries' in info_dict and len(info_dict['entries']) > 0:
                     actual_url = info_dict['entries'][0].get('webpage_url', download_url)
@@ -165,13 +155,39 @@ class MakerService:
                 self.log(song_id, f"[OK] Successfully downloaded original audio to {target_mp3}")
                 self.log(song_id, f"[INFO] Embedding metadata for original.wav (Source: {actual_url})")
                 self.embed_metadata(target_mp3, actual_url)
-                return song_id, actual_url
+                return True, actual_url
             else:
                 self.log(song_id, f"[ERROR] Download failed, original.wav not found.")
-                return None, None
+                return False, None
         except Exception as e:
             self.log(song_id, f"[ERROR] yt-dlp extraction failed: {e}")
-            return None, None
+            return False, None
+
+    def search_and_download_audio(self, song_query, target_dir):
+        """Legacy automated workflow: Searches for the song, uses AudioAgent to pick the best, and downloads it."""
+        song_id = os.path.basename(target_dir)
+        
+        # If input is already a direct URL
+        if song_query.startswith("http://") or song_query.startswith("https://"):
+            download_url = song_query
+            self.log(song_id, f"[INFO] Using direct URL: {download_url}")
+        else:
+            self.log(song_id, f"[WAIT] Searching and vetting results for '{song_query}'...")
+            results = self.get_search_results(song_query)
+            
+            best = next((r for r in results if r.get('recommended')), None)
+            if not best:
+                self.log(song_id, "[ERROR] AudioAgent failed to find a valid source.")
+                return None, None
+                
+            self.log(song_id, f"[OK] AudioAgent chose: {best['url']}")
+            self.log(song_id, f"     Reason: {best.get('reason')}")
+            download_url = best['url']
+        
+        success, actual_url = self.download_audio(download_url, target_dir, song_id)
+        if success:
+            return song_id, actual_url
+        return None, None
 
     def separate_audio(self, song_id, actual_url):
         """Uses Demucs to split the downloaded original.wav into vocals and instrumental, then runs Pitch Analysis."""
@@ -244,8 +260,60 @@ class MakerService:
                 return False
         elif os.path.exists(pitch_json_path):
             self.log(song_id, f"[INFO] pitch_profile.json already exists. Skipping Pitch Analysis.")
-            
+
+        # --- 3. Vocal Activity Map ---
+        vocal_map_path = os.path.join(target_dir, "vocal_map.json")
+        if os.path.exists(final_vocals) and not os.path.exists(vocal_map_path):
+            self.log(song_id, f"[WAIT] Generating Vocal Activity Map...")
+            try:
+                from .vocal_activity_analyzer import VocalActivityAnalyzer
+                vmap = VocalActivityAnalyzer()
+                vmap.analyze(final_vocals, vocal_map_path)
+            except Exception as e:
+                self.log(song_id, f"[ERROR] VocalActivityAnalyzer failed: {e}")
+                
         return True
+
+    def process_specific_song(self, song_id, url=None, local_audio_path=None, lyrics_text=None, lyrics_type="txt"):
+        """API workflow: Takes a specific source and lyrics, and processes them."""
+        target_dir = os.path.join(self.hot_zone, song_id)
+        os.makedirs(target_dir, exist_ok=True)
+        
+        self.log(song_id, f"[INFO] Starting specific processing for {song_id}")
+        
+        # 1. Save Lyrics
+        if lyrics_text:
+            lyrics_filename = f"lyrics_native.{lyrics_type}"
+            lyrics_path = os.path.join(target_dir, lyrics_filename)
+            with open(lyrics_path, "w", encoding="utf-8") as f:
+                f.write(lyrics_text)
+            self.log(song_id, f"[OK] Saved user-provided lyrics to {lyrics_filename}")
+            
+        # 2. Acquire Audio
+        target_mp3 = os.path.join(target_dir, "original.wav")
+        actual_url = "Local File"
+        
+        if local_audio_path and os.path.exists(local_audio_path):
+            self.log(song_id, f"[INFO] Copying local audio file from {local_audio_path}")
+            shutil.copy2(local_audio_path, target_mp3)
+            # Try to convert to wav if it's not already
+            if not local_audio_path.lower().endswith('.wav'):
+                temp_file = target_mp3 + ".temp"
+                shutil.move(target_mp3, temp_file)
+                cmd = [self.ffmpeg_path, "-y", "-i", temp_file, target_mp3]
+                subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                os.remove(temp_file)
+        elif url:
+            success, actual_url = self.download_audio(url, target_dir, song_id)
+            if not success:
+                self.log(song_id, "[ERROR] Failed to download audio from URL.")
+                return False
+        else:
+            self.log(song_id, "[ERROR] Neither URL nor local_audio_path provided.")
+            return False
+            
+        # 3. Separate Audio & Analyze
+        return self.separate_audio(song_id, actual_url)
 
     def process_song(self, song_query, force_reprocess=False):
         """Main workflow: Search -> Download -> Separate."""

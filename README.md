@@ -47,9 +47,16 @@ Karaoke Maker is an automated pipeline designed to search, download, and process
 
 ## 🏃 Execution Instructions
 
-Currently, the pipeline is verified using the `test_pipeline.py` script, which processes a queue of Indian songs concurrently.
+The core engine is now designed to run as a **Flask API Server**, which acts as the backend for the Flutter UI.
 
-To start processing the queue:
+To start the local API server:
+```bash
+cd core_engine
+python api_server.py
+```
+*(The server will run locally on port `5000` and handle background extraction tasks asynchronously).*
+
+You can still use the legacy headless test script if you prefer batch processing:
 ```bash
 python test_pipeline.py
 ```
@@ -60,6 +67,7 @@ For each song, the system creates a dedicated folder in your `ONEDRIVE_HOT_ZONE`
 - `vocals.wav` (The separated vocal track)
 - `instrumental.wav` (The separated karaoke track)
 - `pitch_profile.json` (F0 extraction points mapping the vocals)
+- `vocal_map.json` (RMS energy map of the vocal track)
 - `lyrics_native.lrc/.txt` (Synchronized or raw lyrics in native script)
 - `lyrics_english.lrc/.txt` (LLM-transliterated English lyrics)
 - `debug.log` (A local log detailing the LLM decisions, extraction, and separation process)
@@ -69,6 +77,6 @@ For each song, the system creates a dedicated folder in your `ONEDRIVE_HOT_ZONE`
 - **Phase 1**: High-Fidelity Audio Extraction (✅ Complete)
 - **Phase 2**: Mathematical Pitch Profiling (✅ Complete)
 - **Phase 3**: Agentic Vetting & Lyrics (✅ Complete)
-- **Phase 4**: Flutter Practice Dashboard
-- **Phase 5**: Live Pitch Visualizer Engine
+- **Phase 4**: Flutter Practice Dashboard (✅ Complete)
+- **Phase 5**: Live Pitch Visualizer Engine (✅ Complete)
 - **Phase 6**: "Karaoke Night Live" Integration

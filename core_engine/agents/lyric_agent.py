@@ -151,6 +151,18 @@ Webpage Text:
             self.log(f"[WARN] YouTube search failed: {e}")
         return descriptions
 
+    def fetch_lyrics(self, query):
+        """Fetches lyrics without saving, returning the best available lyrics text and type."""
+        lyrics, is_synced = self.search_lrclib(query)
+        if lyrics:
+            return {"text": lyrics, "type": "lrc" if is_synced else "txt", "source": "LRCLib"}
+            
+        lyrics = self.search_genius(query)
+        if lyrics:
+            return {"text": lyrics, "type": "txt", "source": "Genius API"}
+            
+        return {"text": "", "type": "txt", "source": "None"}
+
     def fetch_and_save(self, query, target_dir, log_callback=None):
         """Fetches lyrics and saves both native and transliterated versions."""
         if log_callback:
@@ -158,13 +170,10 @@ Webpage Text:
             
         self.log(f"[WAIT] LyricAgent: Searching lyrics for '{query}'...")
         
-        lyrics, is_synced = self.search_lrclib(query)
-        source = "LRCLib"
-        
-        if not lyrics:
-            lyrics = self.search_genius(query)
-            is_synced = False
-            source = "Genius API"
+        fetched = self.fetch_lyrics(query)
+        lyrics = fetched["text"]
+        is_synced = fetched["type"] == "lrc"
+        source = fetched["source"]
             
         # --- NEW: Web Search Fallback ---
         if not lyrics:

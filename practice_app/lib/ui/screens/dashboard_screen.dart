@@ -4,6 +4,7 @@ import '../../services/file_explorer_service.dart';
 import '../theme/voxpro_theme.dart';
 import '../widgets/song_card.dart';
 import 'active_session_screen.dart';
+import 'create_song_screen.dart';
 import '../../models/song.dart';
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -166,6 +167,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ],
       ),
+      floatingActionButton: _selectedIndex == 0 ? FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const CreateSongScreen()),
+          );
+        },
+        backgroundColor: VoxProTheme.vocalAccent,
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text("Create Song", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      ) : null,
     );
   }
 }
