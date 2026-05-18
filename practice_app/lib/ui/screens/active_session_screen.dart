@@ -6,11 +6,15 @@ import '../../models/song.dart';
 import '../theme/voxpro_theme.dart';
 import '../widgets/pitch_canvas.dart';
 import '../../services/lyrics_parser.dart';
+import 'package:provider/provider.dart';
+import '../../services/file_explorer_service.dart';
+import '../widgets/song_search_dialog.dart';
 
 class ActiveSessionScreen extends StatefulWidget {
   final Song? selectedSong;
+  final void Function(Song)? onSongSwitched;
 
-  const ActiveSessionScreen({Key? key, this.selectedSong}) : super(key: key);
+  const ActiveSessionScreen({Key? key, this.selectedSong, this.onSongSwitched}) : super(key: key);
 
   @override
   State<ActiveSessionScreen> createState() => _ActiveSessionScreenState();
@@ -197,18 +201,43 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Active Session',
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                widget.selectedSong!.title,
-                style: const TextStyle(
-                  color: VoxProTheme.accent,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Active Session',
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        widget.selectedSong!.title,
+                        style: const TextStyle(
+                          color: VoxProTheme.accent,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.search, size: 32),
+                    color: VoxProTheme.textSecondary,
+                    onPressed: () async {
+                      final service = Provider.of<FileExplorerService>(context, listen: false);
+                      final newSong = await showDialog<Song>(
+                        context: context,
+                        builder: (context) => SongSearchDialog(allSongs: service.songs),
+                      );
+                      if (newSong != null && widget.onSongSwitched != null) {
+                        widget.onSongSwitched!(newSong);
+                      }
+                    },
+                    tooltip: 'Quick Search Songs',
+                  ),
+                ],
               ),
             ],
           ),

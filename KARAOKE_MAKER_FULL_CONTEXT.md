@@ -74,6 +74,9 @@ Because LLM web scraping can occasionally fail, the Dashboard allows users to in
 ### 3. Asynchronous UI Updates
 When a song is queued, the Flutter app adds it to the `FileExplorerService._activeTasks` map. A periodic timer polls the backend's `/status/<task_id>` endpoint. When the status turns `completed`, the Flutter app triggers a file system rescan (`loadLibrary`) to update the UI chips from Orange (Processing) to Green (Ready).
 
+### 4. Global Quick Search & Seamless Switching
+The UI implements a global Quick Search architecture. In the Library, users can filter a large list of songs instantly. In the `ActiveSessionScreen`, a search overlay (`SongSearchDialog`) can be triggered mid-practice. Tapping a new song from this dialog fires an `onSongSwitched` callback back up the widget tree to tear down the current audio context and seamlessly spin up the new song.
+
 ---
 
 ## Deployment & Setup Notes

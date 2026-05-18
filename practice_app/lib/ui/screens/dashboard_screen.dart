@@ -6,6 +6,7 @@ import '../../services/api_service.dart';
 import '../../services/file_explorer_service.dart';
 import '../theme/voxpro_theme.dart';
 import '../widgets/song_card.dart';
+import '../widgets/song_list_tile.dart';
 import 'active_session_screen.dart';
 import 'create_song_screen.dart';
 import '../../models/song.dart';
@@ -20,6 +21,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
   Song? _selectedSong;
   bool _isListView = true;
+  String _searchQuery = '';
 
   Widget _buildSidebar() {
     return Container(
@@ -161,23 +163,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildComponentChip(BuildContext context, String songId, String label, String component, bool exists) {
-    return InkWell(
-      onTap: () => _showReprocessDialog(context, songId, label, component),
-      borderRadius: BorderRadius.circular(4),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('$label: ', style: const TextStyle(color: VoxProTheme.textSecondary, fontSize: 12)),
-            Icon(exists ? Icons.check_box : Icons.cancel, color: exists ? Colors.green : Colors.red, size: 14),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildLibraryView(FileExplorerService service) {
     if (service.currentDirectory == null) {
       return Center(
@@ -214,100 +199,113 @@ class _DashboardScreenState extends State<DashboardScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.all(24.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: Column(
             children: [
-              Text('Song Library', style: Theme.of(context).textTheme.headlineMedium),
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    service.currentDirectory!,
-                    style: const TextStyle(color: VoxProTheme.textSecondary, fontSize: 12),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: Icon(_isListView ? Icons.grid_view : Icons.view_list),
-                    onPressed: () {
-                      setState(() {
-                        _isListView = !_isListView;
-                      });
-                    },
-                    tooltip: 'Toggle View',
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.refresh),
-                    onPressed: () => service.scanDirectory(),
-                    tooltip: 'Refresh Library',
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.folder_open),
-                    onPressed: () => service.pickDirectory(),
-                    tooltip: 'Change Directory',
+                  Text('Song Library', style: Theme.of(context).textTheme.headlineMedium),
+                  Row(
+                    children: [
+                      Text(
+                        service.currentDirectory!,
+                        style: const TextStyle(color: VoxProTheme.textSecondary, fontSize: 12),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: Icon(_isListView ? Icons.grid_view : Icons.view_list),
+                        onPressed: () {
+                          setState(() {
+                            _isListView = !_isListView;
+                          });
+                        },
+                        tooltip: 'Toggle View',
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.refresh),
+                        onPressed: () => service.scanDirectory(),
+                        tooltip: 'Refresh Library',
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.folder_open),
+                        onPressed: () => service.pickDirectory(),
+                        tooltip: 'Change Directory',
+                      ),
+                    ],
                   ),
                 ],
-              )
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                onChanged: (value) {
+                  setState(() {
+                    _searchQuery = value;
+                  });
+                },
+                style: const TextStyle(color: VoxProTheme.textPrimary),
+                decoration: const InputDecoration(
+                  hintText: 'Quick search songs...',
+                  hintStyle: TextStyle(color: VoxProTheme.textSecondary),
+                  prefixIcon: Icon(Icons.search, color: VoxProTheme.textSecondary),
+                  border: OutlineInputBorder(),
+                  enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: VoxProTheme.border)),
+                  focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: VoxProTheme.accent)),
+                ),
+              ),
             ],
           ),
         ),
         Expanded(
-          child: _isListView
-              ? ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                  itemCount: service.songs.length,
-                  itemBuilder: (context, index) {
-                    final song = service.songs[index];
-                    return Card(
-                      color: VoxProTheme.cardBg,
-                      margin: const EdgeInsets.only(bottom: 8.0),
-                      child: ListTile(
-                        title: Text(song.title, style: const TextStyle(fontWeight: FontWeight.bold, color: VoxProTheme.textPrimary)),
-                        subtitle: Wrap(
-                          spacing: 4.0,
-                          children: [
-                            _buildComponentChip(context, song.id, 'Inst', 'instrumental', song.hasInstrumental),
-                            const Text('|', style: const TextStyle(color: VoxProTheme.textSecondary, fontSize: 12)),
-                            _buildComponentChip(context, song.id, 'Vocals', 'vocals', song.hasVocals),
-                            const Text('|', style: const TextStyle(color: VoxProTheme.textSecondary, fontSize: 12)),
-                            _buildComponentChip(context, song.id, 'Pitch', 'pitch', song.hasPitchProfile),
-                            const Text('|', style: const TextStyle(color: VoxProTheme.textSecondary, fontSize: 12)),
-                            _buildComponentChip(context, song.id, 'Map', 'map', song.hasVocalMap),
-                            const Text('|', style: const TextStyle(color: VoxProTheme.textSecondary, fontSize: 12)),
-                            _buildComponentChip(context, song.id, 'Lyrics', 'lyrics', song.hasNativeLyrics || song.hasEnglishLyrics),
-                          ],
-                        ),
-                        trailing: const Icon(Icons.play_circle_fill, color: VoxProTheme.accent),
+          child: Builder(builder: (context) {
+            final filteredSongs = _searchQuery.isEmpty 
+                ? service.songs 
+                : service.songs.where((s) => s.title.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
+                
+            if (filteredSongs.isEmpty) {
+              return const Center(child: Text('No songs found', style: TextStyle(color: VoxProTheme.textSecondary)));
+            }
+            
+            return _isListView
+                ? ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                    itemCount: filteredSongs.length,
+                    itemBuilder: (context, index) {
+                      final song = filteredSongs[index];
+                      return SongListTile(
+                        song: song,
                         onTap: () {
                           setState(() {
                             _selectedSong = song;
                             _selectedIndex = 1;
                           });
                         },
-                      ),
-                    );
-                  },
-                )
-              : GridView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    childAspectRatio: 0.8,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
-                  ),
-                  itemCount: service.songs.length,
-                  itemBuilder: (context, index) {
-                    final song = service.songs[index];
-                    return SongCard(
-                      song: song,
-                      onTap: () {
-                        setState(() {
-                          _selectedSong = song;
-                          _selectedIndex = 1;
-                        });
-                      },
-                    );
-                  },
-                ),
+                        onReprocess: _showReprocessDialog,
+                      );
+                    },
+                  )
+                : GridView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      childAspectRatio: 0.8,
+                      crossAxisSpacing: 16,
+                      mainAxisSpacing: 16,
+                    ),
+                    itemCount: filteredSongs.length,
+                    itemBuilder: (context, index) {
+                      final song = filteredSongs[index];
+                      return SongCard(
+                        song: song,
+                        onTap: () {
+                          setState(() {
+                            _selectedSong = song;
+                            _selectedIndex = 1;
+                          });
+                        },
+                      );
+                    },
+                  );
+          }),
         ),
       ],
     );
@@ -324,7 +322,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const VerticalDivider(width: 1, color: VoxProTheme.border),
           Expanded(
             child: _selectedIndex == 1 
-                ? ActiveSessionScreen(selectedSong: _selectedSong)
+                ? ActiveSessionScreen(
+                    selectedSong: _selectedSong,
+                    onSongSwitched: (newSong) {
+                      setState(() {
+                        _selectedSong = newSong;
+                      });
+                    },
+                  )
                 : _buildLibraryView(service),
           ),
         ],

@@ -6,6 +6,7 @@ VoxPro (the `practice_app`) is the frontend Flutter desktop application for the 
 
 - **Automated Library Scanning**: Uses `file_picker` to point to your `ONEDRIVE_HOT_ZONE`. The dashboard automatically scans all subdirectories and parses the generated assets into a sleek, dark-themed UI.
 - **Smart Component Cards**: Displays interactive badges on songs indicating the availability of Instrumental tracks, Vocal tracks, Pitch Profiles, and Lyrics. Users can click any badge to idempotently reprocess just that specific component or inject manual files.
+- **Global Quick Search**: Features an instantly filtering search bar in the library view and a globally accessible search overlay in the Active Session to seamlessly switch songs mid-practice.
 - **Active Practice Session**: A dedicated UI shell that loads the `instrumental.wav` and provides scrubbable, fully functional media controls.
 - **Synchronized Vocals Guide**: Integrates a secondary, perfectly-synced audio player for the `vocals.wav` file, allowing singers to instantly toggle the vocal reference track on and off mid-performance.
 - **Live Pitch Visualizer**: A `CustomPainter` canvas that visually maps out the song's fundamental frequencies ($F_0$) from the Python-generated `pitch_profile.json`. The target pitch notes scroll beautifully in sync with the audio playhead.
