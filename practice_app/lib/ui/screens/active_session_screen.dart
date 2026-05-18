@@ -25,7 +25,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
   Duration _position = Duration.zero;
   List<dynamic> _targetPitchData = [];
   List<dynamic> _vocalMapData = [];
-  LyricsData? _lyricsData;
+  SongLyrics? _songLyrics;
   String _selectedRootNote = 'C';
 
   @override
@@ -134,7 +134,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
       if (widget.selectedSong!.hasNativeLyrics || widget.selectedSong!.hasEnglishLyrics) {
         final lyrics = await LyricsParser.parse(widget.selectedSong!.directoryPath);
         setState(() {
-          _lyricsData = lyrics;
+          _songLyrics = lyrics;
         });
       }
       // Load vocals if available
@@ -153,14 +153,14 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
     return "$minutes:$seconds";
   }
 
-  String _getCurrentLyric() {
-    if (_lyricsData == null || _lyricsData!.lines.isEmpty) return "";
-    if (!_lyricsData!.isSynced) return "Lyrics available (unsynced)";
+  String _getCurrentLyric(LyricsData? data) {
+    if (data == null || data.lines.isEmpty) return "";
+    if (!data.isSynced) return "Lyrics available (unsynced)";
     
     // Find the current active line
-    for (int i = _lyricsData!.lines.length - 1; i >= 0; i--) {
-      if (_position >= _lyricsData!.lines[i].startTime) {
-        return _lyricsData!.lines[i].text;
+    for (int i = data.lines.length - 1; i >= 0; i--) {
+      if (_position >= data.lines[i].startTime) {
+        return data.lines[i].text;
       }
     }
     return "";
@@ -285,26 +285,41 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                       ),
                 
                 // Overlay Lyrics at the bottom of the canvas
-                if (_lyricsData != null)
+                if (_songLyrics != null && _songLyrics!.hasAnyLyrics)
                   Positioned(
                     bottom: 24.0,
                     left: 24.0,
                     right: 24.0,
-                    child: Text(
-                      _getCurrentLyric(),
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: VoxProTheme.textPrimary,
-                        shadows: [
-                          Shadow(
-                            blurRadius: 8.0,
-                            color: Colors.black87,
-                            offset: Offset(0, 2),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_songLyrics!.nativeData != null)
+                          Text(
+                            _getCurrentLyric(_songLyrics!.nativeData),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.normal,
+                              color: VoxProTheme.textSecondary.withOpacity(0.8),
+                              shadows: const [
+                                Shadow(blurRadius: 4.0, color: Colors.black, offset: Offset(0, 1)),
+                              ],
+                            ),
                           ),
-                        ],
-                      ),
+                        if (_songLyrics!.englishData != null)
+                          Text(
+                            _getCurrentLyric(_songLyrics!.englishData),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
+                              color: VoxProTheme.textPrimary,
+                              shadows: [
+                                Shadow(blurRadius: 8.0, color: Colors.black87, offset: Offset(0, 2)),
+                              ],
+                            ),
+                          ),
+                      ],
                     ),
                   ),
               ],
@@ -386,6 +401,34 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                   });
                 },
                 color: VoxProTheme.textPrimary,
+              ),
+              const SizedBox(width: 24),
+              IconButton(
+                icon: const Icon(Icons.info_outline, size: 36),
+                onPressed: () {
+                  if (_songLyrics?.meaningText != null) {
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        backgroundColor: VoxProTheme.cardBg,
+                        title: const Text('Poetic Meaning', style: TextStyle(color: VoxProTheme.accent)),
+                        content: SingleChildScrollView(
+                          child: Text(
+                            _songLyrics!.meaningText!,
+                            style: const TextStyle(color: VoxProTheme.textPrimary, fontSize: 16),
+                          ),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Close', style: TextStyle(color: VoxProTheme.accent)),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                },
+                color: _songLyrics?.meaningText != null ? VoxProTheme.textPrimary : VoxProTheme.textSecondary.withOpacity(0.3),
               ),
             ],
           ),

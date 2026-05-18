@@ -53,6 +53,33 @@ class ApiService {
     }
   }
 
+  static Future<String> reprocessComponent({
+    required String songId,
+    required String component,
+    String? lyricsText,
+    String? lyricsType,
+  }) async {
+    final body = {
+      'song_id': songId,
+      'component': component,
+      if (lyricsText != null) 'lyrics_text': lyricsText,
+      if (lyricsType != null) 'lyrics_type': lyricsType,
+    };
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/reprocess'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(body),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['task_id'];
+    } else {
+      throw Exception('Failed to start reprocessing: ${response.body}');
+    }
+  }
+
   static Future<Map<String, dynamic>> getStatus(String taskId) async {
     final response = await http.get(Uri.parse('$baseUrl/status/$taskId'));
     if (response.statusCode == 200) {

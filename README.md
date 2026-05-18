@@ -9,13 +9,15 @@ Karaoke Maker is an automated pipeline designed to search, download, and process
 - **AI Vocal Separation**: Leverages Facebook's `demucs` (Hybrid Transformer) to split the track into `vocals.wav` and `instrumental.wav`.
 - **Smart Windows Bypass**: Custom-built Python wrapper that monkeypatches `torchaudio` to use `soundfile` instead of `torchcodec`, completely bypassing notorious PyTorch C++ DLL errors on Windows.
 - **Automated Metadata Injection**: Uses `ffmpeg` to embed the original source URL directly into the generated `.wav` files as a comment tag.
-- **Idempotent Processing**: Automatically skips songs that have already been separated unless forcefully requested.
+- **Granular Idempotent Reprocessing**: The backend tracks exactly which files (lyrics, pitch, map, stems) exist. Users can idempotently reprocess individual components of a song (e.g., regenerate just the lyrics) without forcing a full CPU-heavy audio separation.
 - **Concurrent Pipeline**: Employs thread-pool execution to download new songs in parallel while previous songs undergo heavy CPU separation and analysis.
 - **Mathematical Pitch Profiling**: Uses `librosa.pyin` to extract the fundamental frequency ($F_0$) of vocals at 50 FPS and estimates the song's root Tonic (Sa). Outputs a highly compact JSON payload.
 - **Agentic Audio Vetting**: Utilizes a Local LLM to rank and choose the highest-quality authentic Studio Version from search results, actively rejecting covers and live performances.
-- **Intelligent Lyric Scraper**: Concurrently fetches lyrics via LRCLib, falls back to web scraping (DuckDuckGo/YouTube), and uses the Local LLM to automatically extract and transliterate native Indian scripts into English characters.
+- **Intelligent Lyric Scraper**: Concurrently fetches lyrics via LRCLib, falls back to web scraping (DuckDuckGo/YouTube), and uses the Local LLM to automatically extract and transliterate native Indian scripts strictly into the English (Latin) alphabet.
+- **Poetic Meaning Generation**: Automatically generates a beautiful English poetic translation (`lyrics_meaning.txt`) summarizing the emotion and intent of the song.
+- **Manual Component Injection**: Users can manually inject `.txt` or `.lrc` lyric files or paste raw text. The LLM seamlessly intercepts manual lyrics, processes the English transliteration, and extracts the poetic meaning.
 - **Asynchronous Background Processing**: The UI communicates with the Flask API via a fire-and-forget polling architecture, allowing users to continue using the app while heavy CPU separation happens in the background.
-- **Flutter Practice Dashboard**: A cross-platform app that acts as a Song Library and "Create Song" wizard. It supports local audio uploads, segmented playback controls (Vocals/Instrumental/Both), and real-time status updates.
+- **Flutter Practice Dashboard**: A cross-platform app that acts as a Song Library and "Create Song" wizard. It supports local audio uploads, interactive reprocessing chips, segmented playback controls (Vocals/Instrumental/Both), and real-time status updates.
 - **Live Sargam Pitch Visualizer**: A custom `CustomPainter` canvas that maps pitches to a logarithmic MIDI scale, overlaying user pitch against target pitch. It automatically detects the song's root note (Sa) and dynamically draws horizontal reference lines labeled with traditional Hindustani Sargam notation (Sa, Re, Ga, etc.).
 
 ## 🛠️ Tech Stack

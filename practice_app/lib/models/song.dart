@@ -10,6 +10,8 @@ class Song {
   final bool hasEnglishLyrics;
   final bool hasVocalMap;
 
+  String get id => directoryPath.split(Platform.pathSeparator).last;
+
   Song({
     required this.title,
     required this.directoryPath,

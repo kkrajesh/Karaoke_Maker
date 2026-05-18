@@ -16,28 +16,51 @@ class LyricsData {
   LyricsData({required this.lines, required this.isSynced});
 }
 
+class SongLyrics {
+  final LyricsData? nativeData;
+  final LyricsData? englishData;
+  final String? meaningText;
+
+  SongLyrics({this.nativeData, this.englishData, this.meaningText});
+  
+  bool get hasAnyLyrics => nativeData != null || englishData != null;
+}
+
 class LyricsParser {
-  static Future<LyricsData?> parse(String directoryPath) async {
-    final nativePath = "\$directoryPath\${Platform.pathSeparator}lyrics_native.lrc";
-    final englishPath = "\$directoryPath\${Platform.pathSeparator}lyrics_english.lrc";
-    
-    File file = File(nativePath);
-    if (!await file.exists()) {
-      file = File(englishPath);
-    }
-    
-    if (!await file.exists()) {
-      // Try txt files as fallback
-      final txtNative = File("\$directoryPath\${Platform.pathSeparator}lyrics_native.txt");
-      if (await txtNative.exists()) {
-        final content = await txtNative.readAsString();
-        return _parseUnsynced(content);
+  static Future<SongLyrics> parse(String directoryPath) async {
+    LyricsData? nativeData;
+    LyricsData? englishData;
+    String? meaningText;
+
+    // Load Native
+    File nativeLrc = File("$directoryPath${Platform.pathSeparator}lyrics_native.lrc");
+    if (await nativeLrc.exists()) {
+      nativeData = _parseLrc(await nativeLrc.readAsString());
+    } else {
+      File nativeTxt = File("$directoryPath${Platform.pathSeparator}lyrics_native.txt");
+      if (await nativeTxt.exists()) {
+        nativeData = _parseUnsynced(await nativeTxt.readAsString());
       }
-      return null;
     }
 
-    final content = await file.readAsString();
-    return _parseLrc(content);
+    // Load English
+    File englishLrc = File("$directoryPath${Platform.pathSeparator}lyrics_english.lrc");
+    if (await englishLrc.exists()) {
+      englishData = _parseLrc(await englishLrc.readAsString());
+    } else {
+      File englishTxt = File("$directoryPath${Platform.pathSeparator}lyrics_english.txt");
+      if (await englishTxt.exists()) {
+        englishData = _parseUnsynced(await englishTxt.readAsString());
+      }
+    }
+
+    // Load Meaning
+    File meaningTxt = File("$directoryPath${Platform.pathSeparator}lyrics_meaning.txt");
+    if (await meaningTxt.exists()) {
+      meaningText = await meaningTxt.readAsString();
+    }
+
+    return SongLyrics(nativeData: nativeData, englishData: englishData, meaningText: meaningText);
   }
 
   static LyricsData _parseLrc(String content) {

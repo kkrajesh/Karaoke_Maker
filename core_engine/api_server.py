@@ -85,6 +85,64 @@ def process_song():
     
     return jsonify({"message": "Processing started", "task_id": task_id})
 
+@app.route('/reprocess', methods=['POST'])
+def reprocess_component():
+    data = request.json
+    song_id = data.get('song_id')
+    component = data.get('component') # 'vocals', 'instrumental', 'pitch', 'map', 'lyrics'
+    lyrics_text = data.get('lyrics_text')
+    lyrics_type = data.get('lyrics_type', 'txt')
+
+    if not song_id or not component:
+        return jsonify({"error": "song_id and component are required"}), 400
+
+    target_dir = os.path.join(os.getenv("ONEDRIVE_HOT_ZONE", "."), song_id)
+    if not os.path.exists(target_dir):
+        return jsonify({"error": "Song directory not found"}), 404
+
+    # Delete files based on component
+    import glob
+    files_to_delete = []
+    if component in ['vocals', 'instrumental']:
+        files_to_delete.extend(["vocals.wav", "instrumental.wav"])
+    elif component == 'pitch':
+        files_to_delete.append("pitch_profile.json")
+    elif component == 'map':
+        files_to_delete.append("vocal_map.json")
+    elif component == 'lyrics':
+        files_to_delete.extend(glob.glob(os.path.join(target_dir, "lyrics_english.*")))
+        files_to_delete.extend(glob.glob(os.path.join(target_dir, "lyrics_meaning.*")))
+
+    for f in files_to_delete:
+        path = os.path.join(target_dir, os.path.basename(f))
+        if os.path.exists(path):
+            try:
+                os.remove(path)
+            except Exception as e:
+                print(f"Failed to delete {path}: {e}")
+
+    task_id = f"{song_id}_reprocess_{component}"
+    tasks[task_id] = {"status": "processing"}
+
+    def run_task():
+        try:
+            success = maker.process_specific_song(
+                song_id=song_id,
+                url=None, # It will use existing local original.wav
+                local_audio_path=os.path.join(target_dir, "original.wav"),
+                lyrics_text=lyrics_text,
+                lyrics_type=lyrics_type
+            )
+            tasks[task_id] = {"status": "completed" if success else "failed"}
+        except Exception as e:
+            print(f"Task error: {e}")
+            tasks[task_id] = {"status": "failed", "error": str(e)}
+
+    thread = threading.Thread(target=run_task)
+    thread.start()
+    
+    return jsonify({"message": f"Reprocessing {component} started", "task_id": task_id})
+
 @app.route('/status/<task_id>', methods=['GET'])
 def get_status(task_id):
     task = tasks.get(task_id)

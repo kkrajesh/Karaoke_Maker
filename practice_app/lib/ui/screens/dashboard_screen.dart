@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
+import '../../services/api_service.dart';
 import '../../services/file_explorer_service.dart';
 import '../theme/voxpro_theme.dart';
 import '../widgets/song_card.dart';
@@ -65,16 +68,129 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  void _showReprocessDialog(BuildContext context, String songId, String label, String component) {
+    final TextEditingController lyricsController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: VoxProTheme.cardBg,
+          title: Text('Reprocess $label?', style: const TextStyle(color: VoxProTheme.accent)),
+          content: component == 'lyrics'
+              ? SizedBox(
+                  width: 500,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'This will delete existing lyrics and regenerate them. You can paste manual lyrics below or upload a local file. Leave blank to automatically scrape the web.',
+                        style: TextStyle(color: VoxProTheme.textSecondary),
+                      ),
+                      const SizedBox(height: 16),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            FilePickerResult? result = await FilePicker.pickFiles(
+                              type: FileType.custom,
+                              allowedExtensions: ['txt', 'lrc'],
+                            );
+                            if (result != null) {
+                              File file = File(result.files.single.path!);
+                              String content = await file.readAsString();
+                              lyricsController.text = content;
+                            }
+                          },
+                          icon: const Icon(Icons.upload_file),
+                          label: const Text('Upload Local File'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: VoxProTheme.border,
+                            foregroundColor: VoxProTheme.textPrimary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: lyricsController,
+                        maxLines: 8,
+                        style: const TextStyle(color: VoxProTheme.textPrimary),
+                        decoration: const InputDecoration(
+                          hintText: 'Paste lyrics here...',
+                          hintStyle: TextStyle(color: VoxProTheme.textSecondary),
+                          border: OutlineInputBorder(),
+                          enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: VoxProTheme.border)),
+                          focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: VoxProTheme.accent)),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : Text('This will delete the existing $label data and regenerate it in the background.',
+                  style: const TextStyle(color: VoxProTheme.textSecondary)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel', style: TextStyle(color: VoxProTheme.textSecondary)),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                try {
+                  final service = Provider.of<FileExplorerService>(context, listen: false);
+                  final taskId = await ApiService.reprocessComponent(
+                    songId: songId,
+                    component: component,
+                    lyricsText: component == 'lyrics' && lyricsController.text.isNotEmpty ? lyricsController.text : null,
+                  );
+                  if (context.mounted) {
+                    service.trackTask(taskId, songId, ScaffoldMessenger.of(context));
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: VoxProTheme.vocalAccent),
+              child: const Text('Reprocess', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildComponentChip(BuildContext context, String songId, String label, String component, bool exists) {
+    return InkWell(
+      onTap: () => _showReprocessDialog(context, songId, label, component),
+      borderRadius: BorderRadius.circular(4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('$label: ', style: const TextStyle(color: VoxProTheme.textSecondary, fontSize: 12)),
+            Icon(exists ? Icons.check_box : Icons.cancel, color: exists ? Colors.green : Colors.red, size: 14),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildLibraryView(FileExplorerService service) {
     if (service.currentDirectory == null) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.folder_open, size: 64, color: VoxProTheme.textSecondary),
+            const Icon(Icons.folder_off, size: 64, color: VoxProTheme.textSecondary),
             const SizedBox(height: 16),
-            const Text('No Output Directory Selected'),
-            const SizedBox(height: 16),
+            const Text(
+              'No Directory Selected',
+              style: TextStyle(color: VoxProTheme.textSecondary, fontSize: 18),
+            ),
+            const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: () => service.pickDirectory(),
               icon: const Icon(Icons.drive_folder_upload),
@@ -145,9 +261,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       margin: const EdgeInsets.only(bottom: 8.0),
                       child: ListTile(
                         title: Text(song.title, style: const TextStyle(fontWeight: FontWeight.bold, color: VoxProTheme.textPrimary)),
-                        subtitle: Text(
-                          'Inst: ${song.hasInstrumental ? '✅' : '❌'} | Vocals: ${song.hasVocals ? '✅' : '❌'} | Pitch: ${song.hasPitchProfile ? '✅' : '❌'} | Map: ${song.hasVocalMap ? '✅' : '❌'} | Lyrics: ${(song.hasNativeLyrics || song.hasEnglishLyrics) ? '✅' : '❌'}',
-                          style: const TextStyle(color: VoxProTheme.textSecondary, fontSize: 12),
+                        subtitle: Wrap(
+                          spacing: 4.0,
+                          children: [
+                            _buildComponentChip(context, song.id, 'Inst', 'instrumental', song.hasInstrumental),
+                            const Text('|', style: const TextStyle(color: VoxProTheme.textSecondary, fontSize: 12)),
+                            _buildComponentChip(context, song.id, 'Vocals', 'vocals', song.hasVocals),
+                            const Text('|', style: const TextStyle(color: VoxProTheme.textSecondary, fontSize: 12)),
+                            _buildComponentChip(context, song.id, 'Pitch', 'pitch', song.hasPitchProfile),
+                            const Text('|', style: const TextStyle(color: VoxProTheme.textSecondary, fontSize: 12)),
+                            _buildComponentChip(context, song.id, 'Map', 'map', song.hasVocalMap),
+                            const Text('|', style: const TextStyle(color: VoxProTheme.textSecondary, fontSize: 12)),
+                            _buildComponentChip(context, song.id, 'Lyrics', 'lyrics', song.hasNativeLyrics || song.hasEnglishLyrics),
+                          ],
                         ),
                         trailing: const Icon(Icons.play_circle_fill, color: VoxProTheme.accent),
                         onTap: () {

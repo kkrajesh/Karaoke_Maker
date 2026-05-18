@@ -133,6 +133,51 @@ Webpage Text:
             self.log(f"[WARN] LLM Lyrics extraction failed: {e}")
             return None
 
+    def transliterate_to_english(self, lyrics):
+        """Uses the LLM to strictly transliterate native lyrics to English alphabet (Manglish/Tanglish)."""
+        prompt = f"""
+You are an expert linguist. Your task is to strictly TRANSLITERATE the following lyrics into the LATIN ALPHABET (English letters A-Z).
+CRITICAL: Do NOT output any Hindi, Devanagari, Tamil, Telugu, or other native script. You must spell out the pronunciation using ONLY English letters.
+Example: 'नमस्ते' becomes 'Namaste'.
+Do NOT translate the meaning. Just convert the pronunciation into English characters (e.g., phonetic spelling).
+If the lyrics contain timestamps (e.g. [00:15.34]), you MUST preserve them exactly as they are.
+Output ONLY the transliterated text in the Latin alphabet.
+
+Lyrics:
+{lyrics[:8000]}
+"""
+        try:
+            response = self.llm_client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            self.log(f"[WARN] LLM Transliteration failed: {e}")
+            return None
+
+    def extract_poetic_meaning(self, lyrics):
+        """Uses the LLM to generate a poetic meaning/translation of the lyrics."""
+        prompt = f"""
+You are a poetic translator. Your task is to provide a beautiful, poetic English translation and meaning of the following song lyrics.
+Focus on the emotion, the feel, and the artistic intent of the song.
+You do NOT need to preserve timestamps. Just provide the meaning paragraph by paragraph.
+
+Lyrics:
+{lyrics[:8000]}
+"""
+        try:
+            response = self.llm_client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            self.log(f"[WARN] LLM Poetic translation failed: {e}")
+            return None
+
     def search_youtube_lyrics(self, query):
         """Search YouTube for lyric videos and extract their descriptions."""
         import yt_dlp
@@ -186,74 +231,63 @@ Webpage Text:
 
         return {"text": "", "type": "txt", "source": "None"}
 
-    def fetch_and_save(self, query, target_dir, log_callback=None):
-        """Fetches lyrics and saves both native and transliterated versions."""
+    def process_lyrics(self, target_dir, query=None, manual_lyrics=None, lyrics_type="txt", log_callback=None):
+        """Fetches (if needed) and processes lyrics, generating English transliterations and meanings."""
         if log_callback:
             self.log = log_callback
             
-        self.log(f"[WAIT] LyricAgent: Searching lyrics for '{query}'...")
-        
-        fetched = self.fetch_lyrics(query)
-        lyrics = fetched["text"]
-        is_synced = fetched["type"] == "lrc"
-        source = fetched["source"]
-            
-        # --- NEW: Web Search Fallback ---
-        if not lyrics:
-            self.log(f"[WAIT] LyricAgent: Falling back to Web Search Scraper...")
-            search_results = self.search_duckduckgo_lyrics(query)
-            best_url = self.pick_best_lyric_source(query, search_results)
-            
-            raw_text = ""
-            if best_url:
-                self.log(f"[INFO] LyricAgent: Scraping {best_url}...")
-                try:
-                    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
-                    resp = requests.get(best_url, headers=headers, timeout=10)
-                    if resp.status_code == 200:
-                        soup = BeautifulSoup(resp.text, 'html.parser')
-                        raw_text = soup.get_text(separator="\n", strip=True)
-                except Exception as e:
-                    self.log(f"[WARN] Web Search scraping failed: {e}")
-            
-            # If Web Search completely failed (e.g., blocked by IP rate limit), try YouTube
-            if not raw_text or len(raw_text) < 100:
-                self.log(f"[WAIT] LyricAgent: Web Search failed. Falling back to YouTube Descriptions...")
-                raw_text = self.search_youtube_lyrics(query)
-                best_url = "YouTube Descriptions"
-                
-            if raw_text and len(raw_text) > 100:
-                self.log(f"[WAIT] LyricAgent: Extracting and transliterating with LLM...")
-                eng_lyrics = self.extract_and_transliterate_lyrics(raw_text)
-                
-                if eng_lyrics and len(eng_lyrics) > 20: # Sanity check
-                    # We don't have the native lyrics, just the english ones from the LLM
-                    eng_path = os.path.join(target_dir, "lyrics_english.txt")
-                    with open(eng_path, "w", encoding="utf-8") as f:
-                        f.write(eng_lyrics)
-                    self.log(f"[OK] LyricAgent: Saved scraped English lyrics from {best_url}.")
-                    return True
-            
-        if not lyrics:
+        native_lyrics = manual_lyrics
+        is_synced = lyrics_type == "lrc"
+        source = "Manual Override"
+
+        if not native_lyrics and query:
+            self.log(f"[WAIT] LyricAgent: Searching lyrics for '{query}'...")
+            fetched = self.fetch_lyrics(query)
+            native_lyrics = fetched["text"]
+            is_synced = fetched["type"] == "lrc"
+            source = fetched["source"]
+
+        # --- FALLBACK TO EXISTING ---
+        if not native_lyrics:
+            exts = [".lrc", ".txt"]
+            for e in exts:
+                fallback_path = os.path.join(target_dir, f"lyrics_native{e}")
+                if os.path.exists(fallback_path):
+                    with open(fallback_path, "r", encoding="utf-8") as f:
+                        native_lyrics = f.read()
+                    is_synced = (e == ".lrc")
+                    source = "Existing File Fallback"
+                    self.log(f"[INFO] LyricAgent: Search failed. Falling back to existing {os.path.basename(fallback_path)}.")
+                    break
+
+        if not native_lyrics:
             self.log(f"[INFO] LyricAgent: No lyrics found for '{query}'. Skipping lyrics.")
             return False
-            
+
         ext = ".lrc" if is_synced else ".txt"
         native_path = os.path.join(target_dir, f"lyrics_native{ext}")
-        eng_path = os.path.join(target_dir, f"lyrics_english{ext}")
         
-        # Save original (Native)
+        # 1. Save Native Lyrics
         with open(native_path, "w", encoding="utf-8") as f:
-            f.write(lyrics)
-            
+            f.write(native_lyrics)
         self.log(f"[OK] LyricAgent: Saved native lyrics from {source}.")
-        
-        # Transliterate to English
+
+        # 2. Transliterate to English
         self.log(f"[WAIT] LyricAgent: Transliterating to English using LLM...")
-        eng_lyrics = self.transliterate_to_english(lyrics)
-        if eng_lyrics:
+        eng_lyrics = self.transliterate_to_english(native_lyrics)
+        
+        if eng_lyrics and len(eng_lyrics) > 20:
+            eng_path = os.path.join(target_dir, f"lyrics_english{ext}")
             with open(eng_path, "w", encoding="utf-8") as f:
                 f.write(eng_lyrics)
-            self.log(f"[OK] LyricAgent: Saved english transliterated lyrics.")
+            self.log(f"[OK] LyricAgent: Saved English lyrics.")
             
+            # 3. Poetic Meaning
+            self.log(f"[WAIT] LyricAgent: Generating poetic meaning using LLM...")
+            meaning = self.extract_poetic_meaning(eng_lyrics)
+            if meaning:
+                meaning_path = os.path.join(target_dir, "lyrics_meaning.txt")
+                with open(meaning_path, "w", encoding="utf-8") as f:
+                    f.write(meaning)
+                self.log(f"[OK] LyricAgent: Saved poetic meaning.")
         return True

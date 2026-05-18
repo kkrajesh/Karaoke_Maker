@@ -282,21 +282,34 @@ class MakerService:
         
         self.log(song_id, f"[INFO] Starting specific processing for {song_id}")
         
-        # 1. Save Lyrics
-        if lyrics_text:
-            lyrics_filename = f"lyrics_native.{lyrics_type}"
-            lyrics_path = os.path.join(target_dir, lyrics_filename)
-            with open(lyrics_path, "w", encoding="utf-8") as f:
-                f.write(lyrics_text)
-            self.log(song_id, f"[OK] Saved user-provided lyrics to {lyrics_filename}")
+        # 1. Process Lyrics
+        try:
+            from core_engine.agents.lyric_agent import LyricAgent
+            agent = LyricAgent()
             
+            def lyric_logger(msg):
+                self.log(song_id, msg)
+                
+            query = song_id.replace("_", " ")
+            agent.process_lyrics(
+                target_dir=target_dir,
+                query=query,
+                manual_lyrics=lyrics_text,
+                lyrics_type=lyrics_type,
+                log_callback=lyric_logger
+            )
+        except Exception as e:
+            self.log(song_id, f"[WARN] Failed to process lyrics: {e}")
         # 2. Acquire Audio
         target_mp3 = os.path.join(target_dir, "original.wav")
         actual_url = "Local File"
         
         if local_audio_path and os.path.exists(local_audio_path):
-            self.log(song_id, f"[INFO] Copying local audio file from {local_audio_path}")
-            shutil.copy2(local_audio_path, target_mp3)
+            if os.path.abspath(local_audio_path) != os.path.abspath(target_mp3):
+                self.log(song_id, f"[INFO] Copying local audio file from {local_audio_path}")
+                shutil.copy2(local_audio_path, target_mp3)
+            else:
+                self.log(song_id, f"[INFO] Using existing local audio file {target_mp3}")
             # Try to convert to wav if it's not already
             if not local_audio_path.lower().endswith('.wav'):
                 temp_file = target_mp3 + ".temp"
@@ -363,8 +376,9 @@ class MakerService:
             self.log(song_id, msg)
             
         try:
+            from core_engine.agents.lyric_agent import LyricAgent
             agent = LyricAgent()
-            agent.fetch_and_save(song_query, target_dir, log_callback=lyric_logger)
+            agent.process_lyrics(target_dir=target_dir, query=song_query, log_callback=lyric_logger)
         except Exception as e:
             self.log(song_id, f"[WARN] Lyric thread failed: {e}")
 
