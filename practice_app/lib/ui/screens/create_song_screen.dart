@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:provider/provider.dart';
+import '../../services/file_explorer_service.dart';
 import '../../services/api_service.dart';
 import '../theme/voxpro_theme.dart';
 
@@ -109,8 +111,21 @@ class _CreateSongScreenState extends State<CreateSongScreen> {
   }
 
   Future<void> _startProcessing() async {
-    final q = _queryController.text.trim();
-    if (q.isEmpty) return;
+    String q = _queryController.text.trim();
+    
+    // Auto-fill song name from file if empty
+    if (q.isEmpty && _isLocalAudio && _localAudioPath != null) {
+      final fileName = _localAudioPath!.split(Platform.pathSeparator).last;
+      q = fileName.split('.').first;
+    }
+
+    if (q.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a Song Name in Step 1.')),
+      );
+      setState(() => _currentStep = 0);
+      return;
+    }
 
     final songId = q.replaceAll(' ', '_').replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '');
 
@@ -128,47 +143,20 @@ class _CreateSongScreenState extends State<CreateSongScreen> {
         lyricsType: _lyricsType,
       );
 
-      _pollStatus(taskId);
+      final messenger = ScaffoldMessenger.of(context);
+      final service = Provider.of<FileExplorerService>(context, listen: false);
+      
+      // Start background tracking
+      service.trackTask(taskId, q, messenger);
+
+      // Close wizard
+      if (mounted) Navigator.pop(context);
+      
     } catch (e) {
       setState(() {
         _isProcessing = false;
         _processStatus = 'Failed: $e';
       });
-    }
-  }
-
-  Future<void> _pollStatus(String taskId) async {
-    bool done = false;
-    while (!done) {
-      await Future.delayed(const Duration(seconds: 3));
-      if (!mounted) break;
-      
-      try {
-        final status = await ApiService.getStatus(taskId);
-        setState(() {
-          _processStatus = "Status: ${status['status']}...";
-        });
-        
-        if (status['status'] == 'completed') {
-          done = true;
-          setState(() {
-            _processStatus = "Successfully Generated Assets!";
-            _isProcessing = false;
-          });
-          // Show success and maybe pop after a delay
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Processing Complete! Song added to dashboard.")),
-          );
-        } else if (status['status'] == 'failed') {
-          done = true;
-          setState(() {
-            _processStatus = "Failed: ${status['error']}";
-            _isProcessing = false;
-          });
-        }
-      } catch (e) {
-        // Just keep polling, server might be busy
-      }
     }
   }
 

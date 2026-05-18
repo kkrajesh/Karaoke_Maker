@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
 import '../theme/voxpro_theme.dart';
 import '../../services/lyrics_parser.dart';
+import 'dart:math';
 
 class PitchCanvas extends StatelessWidget {
   final Duration currentPosition;
   final List<dynamic> targetPitchData;
   final List<dynamic>? vocalMapData;
+  final String rootNote;
 
   const PitchCanvas({
     Key? key,
     required this.currentPosition,
     required this.targetPitchData,
     this.vocalMapData,
+    this.rootNote = 'C',
   }) : super(key: key);
 
   @override
@@ -22,6 +25,7 @@ class PitchCanvas extends StatelessWidget {
           currentPosition: currentPosition,
           targetPitchData: targetPitchData,
           vocalMapData: vocalMapData,
+          rootNote: rootNote,
         ),
         size: Size.infinite,
       ),
@@ -33,97 +37,153 @@ class _PitchPainter extends CustomPainter {
   final Duration currentPosition;
   final List<dynamic> targetPitchData;
   final List<dynamic>? vocalMapData;
+  final String rootNote;
 
-  // Viewport configuration
-  static const double visibleSeconds = 4.0; // Show 4 seconds of time on screen
-  static const double minFreq = 100.0; // roughly G2
-  static const double maxFreq = 1000.0; // roughly B5
+  static const double visibleSeconds = 4.0;
+  static const double minMidi = 43.0; // G2
+  static const double maxMidi = 81.0; // A5
 
   _PitchPainter({
     required this.currentPosition,
     required this.targetPitchData,
     this.vocalMapData,
+    this.rootNote = 'C',
   });
+
+  int _noteNameToOffset(String note) {
+    const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    return notes.indexOf(note) != -1 ? notes.indexOf(note) : 0;
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
     final currentTime = currentPosition.inMilliseconds / 1000.0;
+    final playheadX = size.width * 0.2;
+
+    // --- Draw Grid and Sargam Lines ---
+    final int rootOffset = _noteNameToOffset(rootNote);
+    final int middleSa = ((60 - rootOffset) / 12).round() * 12 + rootOffset;
     
-    // Draw background grid (optional, let's keep it clean for now)
-    final gridPaint = Paint()
-      ..color = VoxProTheme.border
-      ..strokeWidth = 1;
+    const sargamMap = {
+      0: 'Sa', 1: 'r', 2: 'Re', 3: 'g', 4: 'Ga', 5: 'Ma',
+      6: 'm', 7: 'Pa', 8: 'd', 9: 'Dha', 10: 'n', 11: 'Ni'
+    };
+
+    double freqToMidi(double freq) {
+      if (freq <= 0) return 0;
+      return 69 + 12 * (log(freq / 440) / ln2);
+    }
+
+    double midiToY(double m) {
+      double clampM = m.clamp(minMidi, maxMidi);
+      double normalized = (clampM - minMidi) / (maxMidi - minMidi);
+      return size.height - (normalized * size.height);
+    }
+
+    // Draw horizontal lines for semitones
+    final textPainter = TextPainter(textDirection: TextDirection.ltr);
     
-    // Draw target pitch line
+    for (int m = minMidi.floor(); m <= maxMidi.ceil(); m++) {
+      double y = midiToY(m.toDouble());
+      int relativePitch = (m - rootOffset) % 12;
+      if (relativePitch < 0) relativePitch += 12;
+      
+      bool isSa = relativePitch == 0;
+      
+      canvas.drawLine(
+        Offset(0, y),
+        Offset(size.width, y),
+        Paint()
+          ..color = isSa ? VoxProTheme.border : VoxProTheme.border.withOpacity(0.3)
+          ..strokeWidth = isSa ? 1.5 : 0.5,
+      );
+
+      // Draw Sargam Label
+      String label = sargamMap[relativePitch] ?? '';
+      int octDiff = ((m - middleSa) / 12).floor();
+      if (octDiff < 0) label += '\u0323'; // Dot below
+      else if (octDiff > 0) label += '\u0307'; // Dot above
+
+      textPainter.text = TextSpan(
+        text: label,
+        style: TextStyle(
+          color: isSa ? VoxProTheme.accent : VoxProTheme.textSecondary.withOpacity(0.7),
+          fontSize: isSa ? 14 : 10,
+          fontWeight: isSa ? FontWeight.bold : FontWeight.normal,
+        ),
+      );
+      textPainter.layout();
+      textPainter.paint(canvas, Offset(8, y - textPainter.height / 2));
+    }
+
+    // Draw playhead
+    canvas.drawLine(
+      Offset(playheadX, 0),
+      Offset(playheadX, size.height),
+      Paint()..color = VoxProTheme.accent.withOpacity(0.5)..strokeWidth = 2,
+    );
+
+    double timeToX(double t) {
+      final timeDiff = t - currentTime;
+      final pixelsPerSecond = size.width / visibleSeconds;
+      return playheadX + (timeDiff * pixelsPerSecond);
+    }
+
+    bool isVocalSection(double t) {
+      if (vocalMapData == null || vocalMapData!.isEmpty) return true;
+      for (final segment in vocalMapData!) {
+        final start = (segment['start'] as num).toDouble();
+        final end = (segment['end'] as num).toDouble();
+        if (t >= start && t <= end) return true;
+      }
+      return false;
+    }
+
+    // Draw Pitch Curve
     final targetPaint = Paint()
       ..color = VoxProTheme.textSecondary.withOpacity(0.5)
       ..strokeWidth = 4
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.fill;
 
-    // Draw active playhead (center of screen or 1/3rd of screen)
-    final playheadX = size.width * 0.2; // 20% from left
-    
-    canvas.drawLine(
-      Offset(playheadX, 0),
-      Offset(playheadX, size.height),
-      Paint()
-        ..color = VoxProTheme.accent.withOpacity(0.5)
-        ..strokeWidth = 2,
-    );
+    if (targetPitchData.isNotEmpty) {
+      for (int i = 0; i < targetPitchData.length - 1; i++) {
+        final p1 = targetPitchData[i];
+        final p2 = targetPitchData[i + 1];
 
-    // Map time to X coordinate
-    double timeToX(double t) {
-      // t is relative to current time
-      final timeDiff = t - currentTime;
-      // Map timeDiff to pixels. 0 timeDiff is at playheadX.
-      // visibleSeconds is mapped to size.width
-      final pixelsPerSecond = size.width / visibleSeconds;
-      return playheadX + (timeDiff * pixelsPerSecond);
-    }
+        final t1 = (p1['t'] as num).toDouble();
+        final t2 = (p2['t'] as num).toDouble();
+        
+        // Skip drawing if outside visible window
+        if (t2 < currentTime - 1 || t1 > currentTime + visibleSeconds) continue;
 
-    // Map frequency to Y coordinate (logarithmic mapping is better, but linear is ok for MVP)
-    double freqToY(double p) {
-      if (p < minFreq) p = minFreq;
-      if (p > maxFreq) p = maxFreq;
-      final range = maxFreq - minFreq;
-      final normalized = (p - minFreq) / range;
-      // Invert Y axis (0 is top, height is bottom)
-      return size.height - (normalized * size.height);
-    }
+        final f1 = (p1['p'] as num).toDouble();
+        final f2 = (p2['p'] as num).toDouble();
+        
+        final m1 = freqToMidi(f1);
+        final m2 = freqToMidi(f2);
 
-    // Helper to determine if time 't' is within an active vocal segment
-    bool isVocalSection(double t) {
-      if (vocalMapData == null || vocalMapData!.isEmpty) return true; // Default to vocal if no map
-      
-      for (final segment in vocalMapData!) {
-        final start = (segment['start'] as num).toDouble();
-        final end = (segment['end'] as num).toDouble();
-        if (t >= start && t <= end) {
-          return true;
+        final x1 = timeToX(t1);
+        final y1 = midiToY(m1);
+        final x2 = timeToX(t2);
+        final y2 = midiToY(m2);
+
+        // Gap in data (unvoiced or separate notes)
+        if (t2 - t1 > 0.1) {
+          canvas.drawCircle(Offset(x1, y1), 2, targetPaint);
+          continue;
         }
-      }
-      return false;
-    }
 
-    for (int i = 0; i < targetPitchData.length; i++) {
-      final point = targetPitchData[i];
-      final t = (point['t'] as num).toDouble();
-      final p = (point['p'] as num).toDouble();
+        final activeColor = isVocalSection(t1) 
+            ? VoxProTheme.vocalAccent 
+            : VoxProTheme.textSecondary.withOpacity(0.5);
+            
+        final linePaint = Paint()
+          ..color = activeColor
+          ..strokeWidth = 4
+          ..strokeCap = StrokeCap.round;
 
-      // Only draw if within visible window
-      if (t >= currentTime - visibleSeconds && t <= currentTime + visibleSeconds) {
-        final x = timeToX(t);
-        final y = freqToY(p);
-        
-        // Color dots based on vocal map
-        final isVocal = isVocalSection(t);
-        final baseColor = isVocal ? VoxProTheme.vocalAccent : VoxProTheme.accent;
-        
-        final color = (t <= currentTime) ? baseColor : VoxProTheme.textSecondary;
-        targetPaint.color = color;
-
-        canvas.drawCircle(Offset(x, y), 3, targetPaint);
+        canvas.drawLine(Offset(x1, y1), Offset(x2, y2), linePaint);
       }
     }
   }
@@ -132,6 +192,7 @@ class _PitchPainter extends CustomPainter {
   bool shouldRepaint(covariant _PitchPainter oldDelegate) {
     return oldDelegate.currentPosition != currentPosition || 
            oldDelegate.targetPitchData != targetPitchData ||
-           oldDelegate.vocalMapData != vocalMapData;
+           oldDelegate.vocalMapData != vocalMapData ||
+           oldDelegate.rootNote != rootNote;
   }
 }

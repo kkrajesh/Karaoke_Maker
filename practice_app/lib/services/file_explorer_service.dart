@@ -1,17 +1,53 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
 import '../models/song.dart';
+import 'api_service.dart';
 
 class FileExplorerService extends ChangeNotifier {
   static const String _dirKey = 'karaoke_hot_zone_dir';
   String? currentDirectory;
   List<Song> songs = [];
   bool isLoading = false;
+  Map<String, String> activeTasks = {}; // taskId -> song name
 
   FileExplorerService() {
     _loadSavedDirectory();
+  }
+
+  void trackTask(String taskId, String songName, ScaffoldMessengerState messenger) async {
+    activeTasks[taskId] = songName;
+    notifyListeners();
+    
+    messenger.showSnackBar(
+      SnackBar(content: Text('Processing "$songName" in background...')),
+    );
+
+    bool done = false;
+    while (!done) {
+      await Future.delayed(const Duration(seconds: 3));
+      try {
+        final status = await ApiService.getStatus(taskId);
+        if (status['status'] == 'completed') {
+          done = true;
+          activeTasks.remove(taskId);
+          scanDirectory(); // Refresh the library
+          messenger.showSnackBar(
+            SnackBar(content: Text('✅ "$songName" processing complete!')),
+          );
+        } else if (status['status'] == 'failed') {
+          done = true;
+          activeTasks.remove(taskId);
+          messenger.showSnackBar(
+            SnackBar(content: Text('❌ "$songName" failed: ${status['error']}')),
+          );
+        }
+      } catch (e) {
+        // Keep polling
+      }
+    }
+    notifyListeners();
   }
 
   Future<void> _loadSavedDirectory() async {
@@ -58,7 +94,7 @@ class FileExplorerService extends ChangeNotifier {
         songs = loadedSongs;
       }
     } catch (e) {
-      print("Error scanning directory: \$e");
+      print("Error scanning directory: $e");
       songs = [];
     }
 

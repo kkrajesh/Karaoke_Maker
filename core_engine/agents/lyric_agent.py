@@ -161,6 +161,29 @@ Webpage Text:
         if lyrics:
             return {"text": lyrics, "type": "txt", "source": "Genius API"}
             
+        # Fallback to Web Search and LLM extraction
+        search_results = self.search_duckduckgo_lyrics(query)
+        best_url = self.pick_best_lyric_source(query, search_results)
+        
+        raw_text = ""
+        if best_url:
+            try:
+                headers = {"User-Agent": "Mozilla/5.0"}
+                resp = requests.get(best_url, headers=headers, timeout=10)
+                if resp.status_code == 200:
+                    soup = BeautifulSoup(resp.text, 'html.parser')
+                    raw_text = soup.get_text(separator="\n", strip=True)
+            except Exception:
+                pass
+                
+        if not raw_text or len(raw_text) < 100:
+            raw_text = self.search_youtube_lyrics(query)
+            
+        if raw_text and len(raw_text) > 100:
+            eng_lyrics = self.extract_and_transliterate_lyrics(raw_text)
+            if eng_lyrics and len(eng_lyrics) > 20:
+                return {"text": eng_lyrics, "type": "txt", "source": "LLM Extracted"}
+
         return {"text": "", "type": "txt", "source": "None"}
 
     def fetch_and_save(self, query, target_dir, log_callback=None):

@@ -20,12 +20,13 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
   final AudioPlayer _audioPlayer = AudioPlayer();
   final AudioPlayer _vocalPlayer = AudioPlayer();
   bool _isPlaying = false;
-  bool _vocalsEnabled = false;
+  String _playbackMode = 'instrumental'; // 'instrumental', 'both', 'vocals'
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
   List<dynamic> _targetPitchData = [];
   List<dynamic> _vocalMapData = [];
   LyricsData? _lyricsData;
+  String _selectedRootNote = 'C';
 
   @override
   void initState() {
@@ -105,6 +106,13 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
           final data = jsonDecode(content);
           setState(() {
             _targetPitchData = data['pitch_data'] ?? [];
+            if (data['metadata'] != null && data['metadata']['estimated_sa_note'] != null) {
+              String note = data['metadata']['estimated_sa_note'];
+              // Extract pitch class (e.g. 'C' from 'C3')
+              _selectedRootNote = note.replaceAll(RegExp(r'\d'), '');
+            } else {
+              _selectedRootNote = 'C';
+            }
           });
         }
       }
@@ -133,7 +141,8 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
       if (widget.selectedSong!.hasVocals) {
         final String vocalPath = "${widget.selectedSong!.directoryPath}${Platform.pathSeparator}vocals.wav";
         await _vocalPlayer.setSource(DeviceFileSource(vocalPath));
-        await _vocalPlayer.setVolume(_vocalsEnabled ? 1.0 : 0.0);
+        await _vocalPlayer.setVolume(_playbackMode == 'instrumental' ? 0.0 : 1.0);
+        await _audioPlayer.setVolume(_playbackMode == 'vocals' ? 0.0 : 1.0);
       }
     }
   }
@@ -205,23 +214,48 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
           ),
         ),
         
-        // Vocals Toggle
         if (widget.selectedSong!.hasVocals)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24.0),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                const Text('Vocals Guide', style: TextStyle(color: VoxProTheme.textSecondary)),
-                Switch(
-                  value: _vocalsEnabled,
-                  activeColor: VoxProTheme.accent,
-                  onChanged: (val) async {
-                    setState(() {
-                      _vocalsEnabled = val;
-                    });
-                    await _vocalPlayer.setVolume(_vocalsEnabled ? 1.0 : 0.0);
+                const Text('Root (Sa): ', style: TextStyle(color: VoxProTheme.textSecondary)),
+                DropdownButton<String>(
+                  value: _selectedRootNote,
+                  dropdownColor: VoxProTheme.cardBg,
+                  style: const TextStyle(color: VoxProTheme.textPrimary),
+                  underline: const SizedBox(),
+                  items: ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+                      .map((note) => DropdownMenuItem(value: note, child: Text(note)))
+                      .toList(),
+                  onChanged: (val) {
+                    if (val != null) setState(() => _selectedRootNote = val);
                   },
+                ),
+                const SizedBox(width: 24),
+                const Text('Playback Mode: ', style: TextStyle(color: VoxProTheme.textSecondary)),
+                const SizedBox(width: 8),
+                SegmentedButton<String>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(value: 'instrumental', label: Text('Instrumental')),
+                    ButtonSegment(value: 'both', label: Text('Both')),
+                    ButtonSegment(value: 'vocals', label: Text('Vocals Only')),
+                  ],
+                  selected: {_playbackMode},
+                  onSelectionChanged: (Set<String> newSelection) async {
+                    setState(() {
+                      _playbackMode = newSelection.first;
+                    });
+                    await _audioPlayer.setVolume(_playbackMode == 'vocals' ? 0.0 : 1.0);
+                    await _vocalPlayer.setVolume(_playbackMode == 'instrumental' ? 0.0 : 1.0);
+                  },
+                  style: SegmentedButton.styleFrom(
+                    backgroundColor: VoxProTheme.cardBg,
+                    selectedForegroundColor: Colors.white,
+                    selectedBackgroundColor: VoxProTheme.accent,
+                  ),
                 ),
               ],
             ),
@@ -247,6 +281,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                         currentPosition: _position,
                         targetPitchData: _targetPitchData,
                         vocalMapData: _vocalMapData,
+                        rootNote: _selectedRootNote,
                       ),
                 
                 // Overlay Lyrics at the bottom of the canvas

@@ -16,6 +16,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
   Song? _selectedSong;
+  bool _isListView = true;
 
   Widget _buildSidebar() {
     return Container(
@@ -109,6 +110,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   const SizedBox(width: 8),
                   IconButton(
+                    icon: Icon(_isListView ? Icons.grid_view : Icons.view_list),
+                    onPressed: () {
+                      setState(() {
+                        _isListView = !_isListView;
+                      });
+                    },
+                    tooltip: 'Toggle View',
+                  ),
+                  IconButton(
                     icon: const Icon(Icons.refresh),
                     onPressed: () => service.scanDirectory(),
                     tooltip: 'Refresh Library',
@@ -124,28 +134,54 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ),
         Expanded(
-          child: GridView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              childAspectRatio: 0.8,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-            ),
-            itemCount: service.songs.length,
-            itemBuilder: (context, index) {
-              final song = service.songs[index];
-              return SongCard(
-                song: song,
-                onTap: () {
-                  setState(() {
-                    _selectedSong = song;
-                    _selectedIndex = 1;
-                  });
-                },
-              );
-            },
-          ),
+          child: _isListView
+              ? ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  itemCount: service.songs.length,
+                  itemBuilder: (context, index) {
+                    final song = service.songs[index];
+                    return Card(
+                      color: VoxProTheme.cardBg,
+                      margin: const EdgeInsets.only(bottom: 8.0),
+                      child: ListTile(
+                        title: Text(song.title, style: const TextStyle(fontWeight: FontWeight.bold, color: VoxProTheme.textPrimary)),
+                        subtitle: Text(
+                          'Inst: ${song.hasInstrumental ? '✅' : '❌'} | Vocals: ${song.hasVocals ? '✅' : '❌'} | Pitch: ${song.hasPitchProfile ? '✅' : '❌'} | Map: ${song.hasVocalMap ? '✅' : '❌'} | Lyrics: ${(song.hasNativeLyrics || song.hasEnglishLyrics) ? '✅' : '❌'}',
+                          style: const TextStyle(color: VoxProTheme.textSecondary, fontSize: 12),
+                        ),
+                        trailing: const Icon(Icons.play_circle_fill, color: VoxProTheme.accent),
+                        onTap: () {
+                          setState(() {
+                            _selectedSong = song;
+                            _selectedIndex = 1;
+                          });
+                        },
+                      ),
+                    );
+                  },
+                )
+              : GridView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    childAspectRatio: 0.8,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
+                  ),
+                  itemCount: service.songs.length,
+                  itemBuilder: (context, index) {
+                    final song = service.songs[index];
+                    return SongCard(
+                      song: song,
+                      onTap: () {
+                        setState(() {
+                          _selectedSong = song;
+                          _selectedIndex = 1;
+                        });
+                      },
+                    );
+                  },
+                ),
         ),
       ],
     );

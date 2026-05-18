@@ -8,6 +8,7 @@ from bs4 import BeautifulSoup
 import yt_dlp
 import concurrent.futures
 import threading
+import requests
 from .config import get_preferred_domains
 from .pitch_analyzer import PitchAnalyzer
 from .agents.audio_agent import AudioAgent

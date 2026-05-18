@@ -14,6 +14,9 @@ Karaoke Maker is an automated pipeline designed to search, download, and process
 - **Mathematical Pitch Profiling**: Uses `librosa.pyin` to extract the fundamental frequency ($F_0$) of vocals at 50 FPS and estimates the song's root Tonic (Sa). Outputs a highly compact JSON payload.
 - **Agentic Audio Vetting**: Utilizes a Local LLM to rank and choose the highest-quality authentic Studio Version from search results, actively rejecting covers and live performances.
 - **Intelligent Lyric Scraper**: Concurrently fetches lyrics via LRCLib, falls back to web scraping (DuckDuckGo/YouTube), and uses the Local LLM to automatically extract and transliterate native Indian scripts into English characters.
+- **Asynchronous Background Processing**: The UI communicates with the Flask API via a fire-and-forget polling architecture, allowing users to continue using the app while heavy CPU separation happens in the background.
+- **Flutter Practice Dashboard**: A cross-platform app that acts as a Song Library and "Create Song" wizard. It supports local audio uploads, segmented playback controls (Vocals/Instrumental/Both), and real-time status updates.
+- **Live Sargam Pitch Visualizer**: A custom `CustomPainter` canvas that maps pitches to a logarithmic MIDI scale, overlaying user pitch against target pitch. It automatically detects the song's root note (Sa) and dynamically draws horizontal reference lines labeled with traditional Hindustani Sargam notation (Sa, Re, Ga, etc.).
 
 ## 🛠️ Tech Stack
 
