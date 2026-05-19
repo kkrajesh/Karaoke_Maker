@@ -7,14 +7,20 @@ class PitchCanvas extends StatelessWidget {
   final Duration currentPosition;
   final List<dynamic> targetPitchData;
   final List<dynamic>? vocalMapData;
+  final List<Map<String, dynamic>>? userPitchData;
   final String rootNote;
+  final Color? targetPitchColor;
+  final Color? userPitchColor;
 
   const PitchCanvas({
     Key? key,
     required this.currentPosition,
     required this.targetPitchData,
     this.vocalMapData,
+    this.userPitchData,
     this.rootNote = 'C',
+    this.targetPitchColor,
+    this.userPitchColor,
   }) : super(key: key);
 
   @override
@@ -25,7 +31,10 @@ class PitchCanvas extends StatelessWidget {
           currentPosition: currentPosition,
           targetPitchData: targetPitchData,
           vocalMapData: vocalMapData,
+          userPitchData: userPitchData,
           rootNote: rootNote,
+          targetPitchColor: targetPitchColor ?? VoxProTheme.vocalAccent,
+          userPitchColor: userPitchColor ?? const Color(0xFF00FFFF),
         ),
         size: Size.infinite,
       ),
@@ -37,7 +46,10 @@ class _PitchPainter extends CustomPainter {
   final Duration currentPosition;
   final List<dynamic> targetPitchData;
   final List<dynamic>? vocalMapData;
+  final List<Map<String, dynamic>>? userPitchData;
   final String rootNote;
+  final Color targetPitchColor;
+  final Color userPitchColor;
 
   static const double visibleSeconds = 4.0;
   static const double minMidi = 43.0; // G2
@@ -47,7 +59,10 @@ class _PitchPainter extends CustomPainter {
     required this.currentPosition,
     required this.targetPitchData,
     this.vocalMapData,
+    this.userPitchData,
     this.rootNote = 'C',
+    required this.targetPitchColor,
+    required this.userPitchColor,
   });
 
   int _noteNameToOffset(String note) {
@@ -175,7 +190,7 @@ class _PitchPainter extends CustomPainter {
         }
 
         final activeColor = isVocalSection(t1) 
-            ? VoxProTheme.vocalAccent 
+            ? targetPitchColor 
             : VoxProTheme.textSecondary.withOpacity(0.5);
             
         final linePaint = Paint()
@@ -186,12 +201,64 @@ class _PitchPainter extends CustomPainter {
         canvas.drawLine(Offset(x1, y1), Offset(x2, y2), linePaint);
       }
     }
+
+    // Draw User Pitch Data
+    if (userPitchData != null && userPitchData!.isNotEmpty) {
+      final userLinePaint = Paint()
+        ..color = userPitchColor
+        ..strokeWidth = 3
+        ..strokeCap = StrokeCap.round
+        ..style = PaintingStyle.stroke;
+        
+      for (int i = 0; i < userPitchData!.length - 1; i++) {
+        final p1 = userPitchData![i];
+        final p2 = userPitchData![i + 1];
+
+        final t1 = p1['time'] as double;
+        final t2 = p2['time'] as double;
+        
+        // Skip drawing if outside visible window
+        if (t2 < currentTime - 2 || t1 > currentTime + visibleSeconds) continue;
+
+        final f1 = p1['pitch'] as double;
+        final f2 = p2['pitch'] as double;
+
+        final m1 = freqToMidi(f1);
+        final m2 = freqToMidi(f2);
+
+        final x1 = timeToX(t1);
+        final y1 = midiToY(m1);
+        final x2 = timeToX(t2);
+        final y2 = midiToY(m2);
+
+        // Gap in data (unvoiced or separate notes)
+        if (t2 - t1 > 0.15) {
+          canvas.drawCircle(Offset(x1, y1), 1.5, Paint()..color = userPitchColor);
+          continue;
+        }
+
+        canvas.drawLine(Offset(x1, y1), Offset(x2, y2), userLinePaint);
+      }
+      
+      // Draw the last point as a dot if it's the very end and standalone
+      if (userPitchData!.length > 0) {
+          final lastP = userPitchData!.last;
+          final t = lastP['time'] as double;
+          if (t >= currentTime - 2 && t <= currentTime + visibleSeconds) {
+             final f = lastP['pitch'] as double;
+             canvas.drawCircle(Offset(timeToX(t), midiToY(freqToMidi(f))), 1.5, Paint()..color = userPitchColor);
+          }
+      }
+    }
   }
 
   @override
   bool shouldRepaint(covariant _PitchPainter oldDelegate) {
     return oldDelegate.currentPosition != currentPosition || 
            oldDelegate.targetPitchData != targetPitchData ||
+           oldDelegate.userPitchData != userPitchData ||
+           oldDelegate.targetPitchColor != targetPitchColor ||
+           oldDelegate.userPitchColor != userPitchColor ||
            oldDelegate.vocalMapData != vocalMapData ||
            oldDelegate.rootNote != rootNote;
   }

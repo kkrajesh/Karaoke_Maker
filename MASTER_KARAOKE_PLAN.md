@@ -62,11 +62,13 @@ This project is executed in **Linear Incremental Phases**. Each phase must be ve
 * **Action:** Build a file-explorer widget that reads the OneDrive "Hot Zone" and displays song cards with metadata.
 * **Sync:** Verify folder-reading on Android via OneSync/FolderSync.
 
-## 🚩 Phase 5: Live Pitch Visualizer Engine
+## ✅ Phase 5: Live Pitch Visualizer Engine (COMPLETED)
 **Task:** Real-time interactive feedback.
-* **UI:** `practice_app/widgets/pitch_canvas.dart`.
-* **Action:** 1. Capture low-latency Mic input.
+* **UI:** `practice_app/widgets/pitch_canvas.dart` & `lyrics_panel.dart`.
+* **Action:** 
+    1. Capture low-latency Mic input using `record` and extract frequency using `pitch_detector_dart`.
     2. Plot user pitch dots over the `pitch_profile.json` target line on a scrolling `CustomPainter` canvas.
+    3. Add a responsive, auto-scrolling **Lyrics Panel** next to the pitch canvas that parses `.txt` or `.lrc` files, allows language toggling, and mathematically guarantees accurate scrolling using fixed `itemExtent`.
 
 ## 🚩 Phase 6: "Karaoke Night Live" Integration (FINAL)
 **Task:** Link the maker to the existing host app.

@@ -4,11 +4,14 @@ import 'services/file_explorer_service.dart';
 import 'ui/theme/voxpro_theme.dart';
 import 'ui/screens/dashboard_screen.dart';
 
+import 'services/settings_service.dart';
+
 void main() {
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => FileExplorerService()),
+        ChangeNotifierProvider(create: (_) => SettingsService()..loadSettings()),
       ],
       child: const KaraokePracticeApp(),
     ),

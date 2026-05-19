@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'dart:convert';
+import 'dart:async';
 import '../../models/song.dart';
 import '../theme/voxpro_theme.dart';
 import '../widgets/pitch_canvas.dart';
@@ -9,6 +10,9 @@ import '../../services/lyrics_parser.dart';
 import 'package:provider/provider.dart';
 import '../../services/file_explorer_service.dart';
 import '../widgets/song_search_dialog.dart';
+import '../widgets/lyrics_panel.dart';
+import '../../services/mic_pitch_service.dart';
+import '../../services/settings_service.dart';
 
 class ActiveSessionScreen extends StatefulWidget {
   final Song? selectedSong;
@@ -30,7 +34,11 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
   final AudioPlayer _audioPlayer = AudioPlayer();
   final AudioPlayer _vocalPlayer = AudioPlayer();
   bool _isPlaying = false;
-  String _playbackMode = 'instrumental'; // 'instrumental', 'both', 'vocals'
+  String _playbackMode = 'both'; // instrumental, vocals, both
+  bool _showLyricsPanel = false;
+  final MicPitchService _micService = MicPitchService();
+  StreamSubscription<double>? _pitchSub;
+  final List<Map<String, dynamic>> _userPitches = [];
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
   List<dynamic> _targetPitchData = [];
@@ -63,6 +71,8 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
   void dispose() {
     _audioPlayer.dispose();
     _vocalPlayer.dispose();
+    _pitchSub?.cancel();
+    _micService.dispose();
     super.dispose();
   }
 
@@ -210,43 +220,57 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Active Session',
+                          style: Theme.of(context).textTheme.headlineMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          widget.selectedSong!.title,
+                          style: const TextStyle(
+                            color: VoxProTheme.accent,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Active Session',
-                        style: Theme.of(context).textTheme.headlineMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        widget.selectedSong!.title,
-                        style: const TextStyle(
-                          color: VoxProTheme.accent,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
+                      if (_songLyrics != null && _songLyrics!.hasAnyLyrics)
+                        IconButton(
+                          icon: Icon(_showLyricsPanel ? Icons.subtitles_off : Icons.subtitles, size: 28),
+                          color: _showLyricsPanel ? VoxProTheme.accent : VoxProTheme.textSecondary,
+                          onPressed: () {
+                            setState(() {
+                              _showLyricsPanel = !_showLyricsPanel;
+                            });
+                          },
+                          tooltip: 'Toggle Lyrics Panel',
                         ),
+                      IconButton(
+                        icon: const Icon(Icons.search, size: 32),
+                        color: VoxProTheme.textSecondary,
+                        onPressed: () async {
+                          final service = Provider.of<FileExplorerService>(context, listen: false);
+                          final newSong = await showDialog<Song>(
+                            context: context,
+                            builder: (context) => SongSearchDialog(allSongs: service.songs),
+                          );
+                          if (newSong != null && widget.onSongSwitched != null) {
+                            widget.onSongSwitched!(newSong);
+                          }
+                        },
+                        tooltip: 'Quick Search Songs',
                       ),
                     ],
-                  ),
-                    ],
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.search, size: 32),
-                    color: VoxProTheme.textSecondary,
-                    onPressed: () async {
-                      final service = Provider.of<FileExplorerService>(context, listen: false);
-                      final newSong = await showDialog<Song>(
-                        context: context,
-                        builder: (context) => SongSearchDialog(allSongs: service.songs),
-                      );
-                      if (newSong != null && widget.onSongSwitched != null) {
-                        widget.onSongSwitched!(newSong);
-                      }
-                    },
-                    tooltip: 'Quick Search Songs',
                   ),
                 ],
               ),
@@ -263,7 +287,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
               spacing: 8,
               runSpacing: 16,
               children: [
-                const Text('Root (Sa): ', style: TextStyle(color: VoxProTheme.textSecondary)),
+                const Text('Root: ', style: TextStyle(color: VoxProTheme.textSecondary)),
                 DropdownButton<String>(
                   value: _selectedRootNote,
                   dropdownColor: VoxProTheme.cardBg,
@@ -276,15 +300,22 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                     if (val != null) setState(() => _selectedRootNote = val);
                   },
                 ),
-                const SizedBox(width: 24),
-                const Text('Playback Mode: ', style: TextStyle(color: VoxProTheme.textSecondary)),
                 const SizedBox(width: 8),
                 SegmentedButton<String>(
                   showSelectedIcon: false,
-                  segments: const [
-                    ButtonSegment(value: 'instrumental', label: Text('Instrumental')),
-                    ButtonSegment(value: 'both', label: Text('Both')),
-                    ButtonSegment(value: 'vocals', label: Text('Vocals Only')),
+                  segments: [
+                    ButtonSegment(
+                      value: 'instrumental', 
+                      label: MediaQuery.of(context).size.width < 600 ? const Icon(Icons.music_note, size: 16) : const Text('Inst')
+                    ),
+                    ButtonSegment(
+                      value: 'both', 
+                      label: MediaQuery.of(context).size.width < 600 ? const Icon(Icons.library_music, size: 16) : const Text('Both')
+                    ),
+                    ButtonSegment(
+                      value: 'vocals', 
+                      label: MediaQuery.of(context).size.width < 600 ? const Icon(Icons.mic, size: 16) : const Text('Vocals')
+                    ),
                   ],
                   selected: {_playbackMode},
                   onSelectionChanged: (Set<String> newSelection) async {
@@ -300,38 +331,76 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                     selectedBackgroundColor: VoxProTheme.accent,
                   ),
                 ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: Icon(_micService.isRecording ? Icons.mic : Icons.mic_off),
+                  color: _micService.isRecording ? Colors.red : VoxProTheme.textSecondary,
+                  tooltip: _micService.isRecording ? 'Disable Mic Pitch' : 'Enable Mic Pitch',
+                  onPressed: () async {
+                    if (_micService.isRecording) {
+                      await _micService.stop();
+                      _pitchSub?.cancel();
+                    } else {
+                      final success = await _micService.start();
+                      if (success) {
+                        _pitchSub = _micService.pitchStream.listen((pitch) {
+                          if (_audioPlayer.state == PlayerState.playing) {
+                            setState(() {
+                              _userPitches.add({
+                                'time': _position.inMilliseconds / 1000.0,
+                                'pitch': pitch,
+                              });
+                            });
+                          }
+                        });
+                      } else {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Microphone permission denied.')));
+                        }
+                      }
+                    }
+                    setState(() {});
+                  },
+                ),
               ],
             ),
           ),
         Expanded(
-          child: Container(
-            margin: EdgeInsets.symmetric(
-              horizontal: MediaQuery.of(context).size.width < 600 ? 16.0 : 24.0, 
-              vertical: 8.0,
-            ),
-            decoration: BoxDecoration(
-              color: VoxProTheme.cardBg,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: VoxProTheme.border),
-            ),
-            child: Stack(
-              children: [
-                _targetPitchData.isEmpty 
-                    ? const Center(
-                        child: Text(
-                          'No pitch data available for this song.',
-                          style: TextStyle(color: VoxProTheme.textSecondary),
-                        ),
-                      )
-                    : PitchCanvas(
-                        currentPosition: _position,
-                        targetPitchData: _targetPitchData,
-                        vocalMapData: _vocalMapData,
-                        rootNote: _selectedRootNote,
-                      ),
-                
-                // Overlay Lyrics at the bottom of the canvas
-                if (_songLyrics != null && _songLyrics!.hasAnyLyrics)
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isNarrow = constraints.maxWidth < 600;
+              
+              final canvasWidget = Container(
+                margin: EdgeInsets.symmetric(
+                  horizontal: isNarrow ? 16.0 : 24.0, 
+                  vertical: 8.0,
+                ),
+                decoration: BoxDecoration(
+                  color: VoxProTheme.cardBg,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: VoxProTheme.border),
+                ),
+                child: Stack(
+                  children: [
+                    _targetPitchData.isEmpty 
+                        ? const Center(
+                            child: Text(
+                              'No pitch data available for this song.',
+                              style: TextStyle(color: VoxProTheme.textSecondary),
+                            ),
+                          )
+                        : PitchCanvas(
+                            currentPosition: _position,
+                            targetPitchData: _targetPitchData,
+                            vocalMapData: _vocalMapData,
+                            rootNote: _selectedRootNote,
+                            userPitchData: _userPitches,
+                            targetPitchColor: context.watch<SettingsService>().targetPitchColor,
+                            userPitchColor: context.watch<SettingsService>().userPitchColor,
+                          ),
+                    
+                    // Overlay Lyrics at the bottom of the canvas (only if panel is hidden)
+                    if (!_showLyricsPanel && _songLyrics != null && _songLyrics!.hasAnyLyrics)
                   Positioned(
                     bottom: 24.0,
                     left: 24.0,
@@ -370,8 +439,45 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                   ),
               ],
             ),
-          ),
-        ),
+          );
+
+          if (!_showLyricsPanel || _songLyrics == null || !_songLyrics!.hasAnyLyrics) {
+            return canvasWidget;
+          }
+
+          final lyricsWidget = Container(
+            width: isNarrow ? null : 350,
+            height: isNarrow ? 250 : null,
+            margin: EdgeInsets.only(
+              right: isNarrow ? 16.0 : 24.0,
+              left: isNarrow ? 16.0 : 0.0,
+              bottom: 8.0,
+              top: 8.0,
+            ),
+            child: LyricsPanel(
+              songLyrics: _songLyrics!,
+              currentPosition: _position,
+            ),
+          );
+
+          if (isNarrow) {
+            return Column(
+              children: [
+                Expanded(child: canvasWidget),
+                lyricsWidget,
+              ],
+            );
+          } else {
+            return Row(
+              children: [
+                Expanded(child: canvasWidget),
+                lyricsWidget,
+              ],
+            );
+          }
+        },
+      ),
+    ),
         
         // Progress Slider
         Padding(

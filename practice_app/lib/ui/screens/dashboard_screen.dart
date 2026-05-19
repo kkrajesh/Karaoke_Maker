@@ -5,11 +5,14 @@ import 'package:file_picker/file_picker.dart';
 import '../../services/api_service.dart';
 import '../../services/file_explorer_service.dart';
 import '../theme/voxpro_theme.dart';
-import '../widgets/song_card.dart';
-import '../widgets/song_list_tile.dart';
+import '../../services/file_explorer_service.dart';
+import '../../models/song.dart';
 import 'active_session_screen.dart';
 import 'create_song_screen.dart';
-import '../../models/song.dart';
+import 'settings_screen.dart';
+import '../widgets/song_card.dart';
+import '../widgets/song_list_tile.dart';
+
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
 
@@ -459,7 +462,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       });
                     },
                   )
-                : _buildLibraryView(service),
+                : _selectedIndex == 2
+                    ? const SettingsScreen()
+                    : _buildLibraryView(service),
           ),
         ],
       ),
