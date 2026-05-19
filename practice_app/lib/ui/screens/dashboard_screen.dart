@@ -22,6 +22,38 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Song? _selectedSong;
   bool _isListView = true;
   String _searchQuery = '';
+  
+  bool _isSidebarOpen = false;
+  bool _priorWideState = true;
+  bool? _wasWide;
+  bool? _filterVocals;
+  bool? _filterInst;
+  bool? _filterPitch;
+  bool? _filterMap;
+  bool? _filterLyrics;
+
+  bool? _nextFilterState(bool? current) {
+    if (current == null) return true;
+    if (current == true) return false;
+    return null;
+  }
+
+  Widget _buildTriStateChip(String label, bool? state, ValueChanged<bool?> onChanged, Color accentColor) {
+    final isSelected = state != null;
+    final isExclude = state == false;
+    final activeColor = isExclude ? Colors.redAccent : accentColor;
+
+    return FilterChip(
+      label: Text(label),
+      selected: isSelected,
+      onSelected: (_) => onChanged(_nextFilterState(state)),
+      selectedColor: activeColor.withValues(alpha: 0.3),
+      checkmarkColor: activeColor,
+      showCheckmark: false,
+      avatar: isSelected ? Icon(isExclude ? Icons.block : Icons.check, color: activeColor, size: 18) : null,
+      side: BorderSide(color: isSelected ? activeColor : VoxProTheme.border),
+    );
+  }
 
   Widget _buildSidebar() {
     return Container(
@@ -29,17 +61,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       color: VoxProTheme.sidebar,
       child: Column(
         children: [
-          const SizedBox(height: 32),
-          Text(
-            'KARAOKE MAKER',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 2,
-              color: VoxProTheme.accent,
-            ),
-          ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 16),
           _buildSidebarItem(Icons.library_music, 'Library', 0),
           _buildSidebarItem(Icons.mic, 'Active Session', 1),
           const Spacer(),
@@ -76,88 +98,92 @@ class _DashboardScreenState extends State<DashboardScreen> {
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          backgroundColor: VoxProTheme.cardBg,
-          title: Text('Reprocess $label?', style: const TextStyle(color: VoxProTheme.accent)),
-          content: component == 'lyrics'
-              ? SizedBox(
-                  width: 500,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text(
-                        'This will delete existing lyrics and regenerate them. You can paste manual lyrics below or upload a local file. Leave blank to automatically scrape the web.',
-                        style: TextStyle(color: VoxProTheme.textSecondary),
-                      ),
-                      const SizedBox(height: 16),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: ElevatedButton.icon(
-                          onPressed: () async {
-                            FilePickerResult? result = await FilePicker.pickFiles(
-                              type: FileType.custom,
-                              allowedExtensions: ['txt', 'lrc'],
-                            );
-                            if (result != null) {
-                              File file = File(result.files.single.path!);
-                              String content = await file.readAsString();
-                              lyricsController.text = content;
-                            }
-                          },
-                          icon: const Icon(Icons.upload_file),
-                          label: const Text('Upload Local File'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: VoxProTheme.border,
-                            foregroundColor: VoxProTheme.textPrimary,
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            return AlertDialog(
+              backgroundColor: VoxProTheme.cardBg,
+              title: Text('Reprocess $label?', style: const TextStyle(color: VoxProTheme.accent)),
+              content: component == 'lyrics'
+                  ? Container(
+                      constraints: const BoxConstraints(maxWidth: 500),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'This will delete existing lyrics and regenerate them. You can paste manual lyrics below or upload a local file. Leave blank to automatically scrape the web.',
+                            style: TextStyle(color: VoxProTheme.textSecondary),
                           ),
-                        ),
+                          const SizedBox(height: 16),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: ElevatedButton.icon(
+                              onPressed: () async {
+                                FilePickerResult? result = await FilePicker.pickFiles(
+                                  type: FileType.custom,
+                                  allowedExtensions: ['txt', 'lrc'],
+                                );
+                                if (result != null) {
+                                  File file = File(result.files.single.path!);
+                                  String content = await file.readAsString();
+                                  lyricsController.text = content;
+                                }
+                              },
+                              icon: const Icon(Icons.upload_file),
+                              label: const Text('Upload Local File'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: VoxProTheme.border,
+                                foregroundColor: VoxProTheme.textPrimary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: lyricsController,
+                            maxLines: 8,
+                            style: const TextStyle(color: VoxProTheme.textPrimary),
+                            decoration: const InputDecoration(
+                              hintText: 'Paste lyrics here...',
+                              hintStyle: TextStyle(color: VoxProTheme.textSecondary),
+                              border: OutlineInputBorder(),
+                              enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: VoxProTheme.border)),
+                              focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: VoxProTheme.accent)),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: lyricsController,
-                        maxLines: 8,
-                        style: const TextStyle(color: VoxProTheme.textPrimary),
-                        decoration: const InputDecoration(
-                          hintText: 'Paste lyrics here...',
-                          hintStyle: TextStyle(color: VoxProTheme.textSecondary),
-                          border: OutlineInputBorder(),
-                          enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: VoxProTheme.border)),
-                          focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: VoxProTheme.accent)),
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : Text('This will delete the existing $label data and regenerate it in the background.',
-                  style: const TextStyle(color: VoxProTheme.textSecondary)),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel', style: TextStyle(color: VoxProTheme.textSecondary)),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                Navigator.pop(context);
-                try {
-                  final service = Provider.of<FileExplorerService>(context, listen: false);
-                  final taskId = await ApiService.reprocessComponent(
-                    songId: songId,
-                    component: component,
-                    lyricsText: component == 'lyrics' && lyricsController.text.isNotEmpty ? lyricsController.text : null,
-                  );
-                  if (context.mounted) {
-                    service.trackTask(taskId, songId, ScaffoldMessenger.of(context));
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-                  }
-                }
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: VoxProTheme.vocalAccent),
-              child: const Text('Reprocess', style: TextStyle(color: Colors.white)),
-            ),
-          ],
+                    )
+                  : Text('This will delete the existing $label data and regenerate it in the background.',
+                      style: const TextStyle(color: VoxProTheme.textSecondary)),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel', style: TextStyle(color: VoxProTheme.textSecondary)),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    Navigator.pop(context);
+                    try {
+                      final service = Provider.of<FileExplorerService>(context, listen: false);
+                      final taskId = await ApiService.reprocessComponent(
+                        songId: songId,
+                        component: component,
+                        lyricsText: component == 'lyrics' && lyricsController.text.isNotEmpty ? lyricsController.text : null,
+                      );
+                      if (context.mounted) {
+                        service.trackTask(taskId, songId, ScaffoldMessenger.of(context));
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                      }
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: VoxProTheme.vocalAccent),
+                  child: const Text('Reprocess', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          }
         );
       },
     );
@@ -201,17 +227,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
           padding: const EdgeInsets.all(24.0),
           child: Column(
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 16,
+                runSpacing: 8,
                 children: [
-                  Text('Song Library', style: Theme.of(context).textTheme.headlineMedium),
                   Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('Song Library', style: Theme.of(context).textTheme.headlineMedium),
+                    ],
+                  ),
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 8,
                     children: [
                       Text(
                         service.currentDirectory!,
                         style: const TextStyle(color: VoxProTheme.textSecondary, fontSize: 12),
                       ),
-                      const SizedBox(width: 8),
                       IconButton(
                         icon: Icon(_isListView ? Icons.grid_view : Icons.view_list),
                         onPressed: () {
@@ -252,20 +288,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: VoxProTheme.accent)),
                 ),
               ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 8.0,
+                runSpacing: 4.0,
+                children: [
+                  _buildTriStateChip('Vocals', _filterVocals, (v) => setState(() => _filterVocals = v), VoxProTheme.vocalAccent),
+                  _buildTriStateChip('Instrumental', _filterInst, (v) => setState(() => _filterInst = v), VoxProTheme.instAccent),
+                  _buildTriStateChip('Pitch', _filterPitch, (v) => setState(() => _filterPitch = v), VoxProTheme.pitchAccent),
+                  _buildTriStateChip('Map', _filterMap, (v) => setState(() => _filterMap = v), VoxProTheme.mapAccent),
+                  _buildTriStateChip('Lyrics', _filterLyrics, (v) => setState(() => _filterLyrics = v), VoxProTheme.lyricsAccent),
+                ],
+              ),
             ],
           ),
         ),
         Expanded(
           child: Builder(builder: (context) {
-            final filteredSongs = _searchQuery.isEmpty 
+            var filteredSongs = _searchQuery.isEmpty 
                 ? service.songs 
                 : service.songs.where((s) => s.title.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
+            
+            if (_filterVocals == true) filteredSongs = filteredSongs.where((s) => s.hasVocals).toList();
+            if (_filterVocals == false) filteredSongs = filteredSongs.where((s) => !s.hasVocals).toList();
+            
+            if (_filterInst == true) filteredSongs = filteredSongs.where((s) => s.hasInstrumental).toList();
+            if (_filterInst == false) filteredSongs = filteredSongs.where((s) => !s.hasInstrumental).toList();
+            
+            if (_filterPitch == true) filteredSongs = filteredSongs.where((s) => s.hasPitchProfile).toList();
+            if (_filterPitch == false) filteredSongs = filteredSongs.where((s) => !s.hasPitchProfile).toList();
+            
+            if (_filterMap == true) filteredSongs = filteredSongs.where((s) => s.hasVocalMap).toList();
+            if (_filterMap == false) filteredSongs = filteredSongs.where((s) => !s.hasVocalMap).toList();
+            
+            if (_filterLyrics == true) filteredSongs = filteredSongs.where((s) => s.hasEnglishLyrics || s.hasNativeLyrics).toList();
+            if (_filterLyrics == false) filteredSongs = filteredSongs.where((s) => !(s.hasEnglishLyrics || s.hasNativeLyrics)).toList();
                 
             if (filteredSongs.isEmpty) {
               return const Center(child: Text('No songs found', style: TextStyle(color: VoxProTheme.textSecondary)));
             }
             
-            return _isListView
+            Widget listWidget = _isListView
                 ? ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 24.0),
                     itemCount: filteredSongs.length,
@@ -283,28 +346,51 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       );
                     },
                   )
-                : GridView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      childAspectRatio: 0.8,
-                      crossAxisSpacing: 16,
-                      mainAxisSpacing: 16,
-                    ),
-                    itemCount: filteredSongs.length,
-                    itemBuilder: (context, index) {
-                      final song = filteredSongs[index];
-                      return SongCard(
-                        song: song,
-                        onTap: () {
-                          setState(() {
-                            _selectedSong = song;
-                            _selectedIndex = 1;
-                          });
-                        },
-                      );
-                    },
-                  );
+                  : LayoutBuilder(
+                      builder: (context, constraints) {
+                        int crossAxisCount = 3;
+                        if (constraints.maxWidth < 600) crossAxisCount = 1;
+                        else if (constraints.maxWidth < 1000) crossAxisCount = 2;
+                        else if (constraints.maxWidth > 1400) crossAxisCount = 4;
+                        
+                        return GridView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: crossAxisCount,
+                            childAspectRatio: 0.8,
+                            crossAxisSpacing: 16,
+                            mainAxisSpacing: 16,
+                          ),
+                          itemCount: filteredSongs.length,
+                          itemBuilder: (context, index) {
+                            final song = filteredSongs[index];
+                            return SongCard(
+                              song: song,
+                              onTap: () {
+                                setState(() {
+                                  _selectedSong = song;
+                                  _selectedIndex = 1;
+                                });
+                              },
+                            );
+                          },
+                        );
+                      },
+                    );
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(left: 24.0, right: 24.0, bottom: 8.0),
+                  child: Text(
+                    '${filteredSongs.length} songs found',
+                    style: const TextStyle(color: VoxProTheme.textSecondary, fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                Expanded(child: listWidget),
+              ],
+            );
           }),
         ),
       ],
@@ -314,12 +400,55 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final service = context.watch<FileExplorerService>();
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isWide = screenWidth > 800;
+    
+    if (_wasWide == null) {
+      _isSidebarOpen = isWide;
+    } else {
+      if (_wasWide! && !isWide) {
+        _isSidebarOpen = false;
+      } else if (!_wasWide! && isWide) {
+        _isSidebarOpen = _priorWideState;
+      }
+    }
+    _wasWide = isWide;
     
     return Scaffold(
+      appBar: AppBar(
+        backgroundColor: VoxProTheme.sidebar,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.menu),
+          color: VoxProTheme.textPrimary,
+          onPressed: () {
+            setState(() {
+              _isSidebarOpen = !_isSidebarOpen;
+              if (isWide) {
+                _priorWideState = _isSidebarOpen;
+              }
+            });
+          },
+          tooltip: 'Toggle Sidebar',
+        ),
+        title: const Text(
+          'KARAOKE MAKER',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 2,
+            color: VoxProTheme.accent,
+          ),
+        ),
+      ),
       body: Row(
         children: [
-          _buildSidebar(),
-          const VerticalDivider(width: 1, color: VoxProTheme.border),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeInOut,
+            child: _isSidebarOpen ? _buildSidebar() : const SizedBox.shrink(),
+          ),
+          if (_isSidebarOpen) const VerticalDivider(width: 1, color: VoxProTheme.border),
           Expanded(
             child: _selectedIndex == 1 
                 ? ActiveSessionScreen(
@@ -334,7 +463,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ],
       ),
-      floatingActionButton: _selectedIndex == 0 ? FloatingActionButton.extended(
+      floatingActionButton: _selectedIndex == 0 ? (screenWidth < 600 ? FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const CreateSongScreen()),
+          );
+        },
+        backgroundColor: VoxProTheme.vocalAccent,
+        child: const Icon(Icons.add, color: Colors.white),
+      ) : FloatingActionButton.extended(
         onPressed: () {
           Navigator.push(
             context,
@@ -344,7 +482,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         backgroundColor: VoxProTheme.vocalAccent,
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text("Create Song", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-      ) : null,
+      )) : null,
     );
   }
 }

@@ -31,6 +31,11 @@ This project is executed in **Linear Incremental Phases**. Each phase must be ve
 * **Action:** 1. `yt-dlp` download at 320kbps MP3 (Original Reference).
     2. `demucs` separation (OpenVINO accelerated) to produce `instrumental.wav` and `vocals.wav`.
 * **Storage:** Write outputs to `OneDrive/ActiveKaraoke/[SongID]/`.
+* **Logging:** Implement `debug.log` inside each song folder for troubleshooting.
+* **Metadata:** Embed source URL into the final audio files using FFmpeg.
+* **Improvement:** Add logic to skip processing if the song folder already exists and contains the necessary files (auto-resume).
+* **Improvement:** Force re-processing of existing folders if a flag is passed.
+* **Improvement:** make download/separation two parallel process so the subseqent songs can start downloading while already downloaded song is being processed for pitch analysis.
 
 ## 🚩 Phase 2: Mathematical Pitch Profiling
 **Task:** Build the "Target Line" for the visualizer.
@@ -43,6 +48,13 @@ This project is executed in **Linear Incremental Phases**. Each phase must be ve
 * **File:** `core_engine/agents/`
 * **Action:** 1. **Audio Agent:** Query Local LLM (Ollama/LM Studio) to pick the best "Studio Version" from search results.
     2. **Lyric Agent:** Fetch `.lrc` (timed) or `.txt` (raw) from Genius/LRCLib.
+**Task:** Ensure high-quality source audio and lyrics.
+* **Action:**
+    * Integrate **Ollama/LM Studio** to query and rank audio sources.
+    * Implement logic to select the highest-rated "Studio Version" from search results.
+    * Fetch synchronized lyrics (.lrc) or raw lyrics from sources like Genius.
+    * Store lyrics in the song folder as `lyrics.lrc`.
+    * **Logging:** Update `debug.log` to show which source was chosen and why.
 
 ## 🚩 Phase 4: Flutter Practice Dashboard
 **Task:** Establish the cross-platform shell.

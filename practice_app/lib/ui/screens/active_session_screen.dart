@@ -12,9 +12,15 @@ import '../widgets/song_search_dialog.dart';
 
 class ActiveSessionScreen extends StatefulWidget {
   final Song? selectedSong;
-  final void Function(Song)? onSongSwitched;
+  final Function(Song)? onSongSwitched;
+  final VoidCallback? onToggleSidebar;
 
-  const ActiveSessionScreen({Key? key, this.selectedSong, this.onSongSwitched}) : super(key: key);
+  const ActiveSessionScreen({
+    Key? key, 
+    this.selectedSong,
+    this.onSongSwitched,
+    this.onToggleSidebar,
+  }) : super(key: key);
 
   @override
   State<ActiveSessionScreen> createState() => _ActiveSessionScreenState();
@@ -197,14 +203,17 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.all(24.0),
+          padding: EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 16.0 : 24.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
@@ -220,6 +229,8 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
+                    ],
+                  ),
                     ],
                   ),
                   IconButton(
@@ -245,9 +256,12 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
         
         if (widget.selectedSong!.hasVocals)
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+            padding: EdgeInsets.symmetric(horizontal: MediaQuery.of(context).size.width < 600 ? 16.0 : 24.0),
+            child: Wrap(
+              alignment: WrapAlignment.end,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 16,
               children: [
                 const Text('Root (Sa): ', style: TextStyle(color: VoxProTheme.textSecondary)),
                 DropdownButton<String>(
@@ -291,7 +305,10 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
           ),
         Expanded(
           child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
+            margin: EdgeInsets.symmetric(
+              horizontal: MediaQuery.of(context).size.width < 600 ? 16.0 : 24.0, 
+              vertical: 8.0,
+            ),
             decoration: BoxDecoration(
               color: VoxProTheme.cardBg,
               borderRadius: BorderRadius.circular(16),

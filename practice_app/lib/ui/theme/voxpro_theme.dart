@@ -8,6 +8,10 @@ class VoxProTheme {
   static const Color cardBg = Color(0xFF1E222A);
   static const Color accent = Color(0xFF00FFCC); // Neon teal for instrumental/active states
   static const Color vocalAccent = Color(0xFFFF00FF); // Neon purple/pink for vocals guide
+  static const Color instAccent = Color(0xFF00BFFF); // Deep Sky Blue for instrumental
+  static const Color pitchAccent = Color(0xFFFFD700); // Gold for pitch profile
+  static const Color mapAccent = Color(0xFFFF4500); // Orange Red for vocal map
+  static const Color lyricsAccent = Color(0xFF32CD32); // Lime Green for lyrics
   static const Color textPrimary = Color(0xFFE2E8F0);
   static const Color textSecondary = Color(0xFF94A3B8);
   static const Color border = Color(0xFF2D333F);

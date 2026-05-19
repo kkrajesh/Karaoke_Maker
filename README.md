@@ -17,7 +17,7 @@ Karaoke Maker is an automated pipeline designed to search, download, and process
 - **Poetic Meaning Generation**: Automatically generates a beautiful English poetic translation (`lyrics_meaning.txt`) summarizing the emotion and intent of the song.
 - **Manual Component Injection**: Users can manually inject `.txt` or `.lrc` lyric files or paste raw text. The LLM seamlessly intercepts manual lyrics, processes the English transliteration, and extracts the poetic meaning.
 - **Asynchronous Background Processing**: The UI communicates with the Flask API via a fire-and-forget polling architecture, allowing users to continue using the app while heavy CPU separation happens in the background.
-- **Flutter Practice Dashboard**: A cross-platform app that acts as a Song Library and "Create Song" wizard. It supports local audio uploads, interactive reprocessing chips, segmented playback controls (Vocals/Instrumental/Both), and real-time status updates.
+- **Flutter Practice Dashboard**: A cross-platform app featuring a fully responsive, adaptive UI that acts as a Song Library and "Create Song" wizard. It supports local audio uploads, interactive tri-state filtering chips, segmented playback controls (Vocals/Instrumental/Both), and real-time status updates.
 - **Global Quick Search**: Instantly filter songs in the Library view or invoke a global search overlay mid-practice to seamlessly switch songs on the fly.
 - **Live Sargam Pitch Visualizer**: A custom `CustomPainter` canvas that maps pitches to a logarithmic MIDI scale, overlaying user pitch against target pitch. It automatically detects the song's root note (Sa) and dynamically draws horizontal reference lines labeled with traditional Hindustani Sargam notation (Sa, Re, Ga, etc.).
 

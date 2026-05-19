@@ -211,7 +211,10 @@ class _CreateSongScreenState extends State<CreateSongScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Row(
+                  Wrap(
+                    spacing: 16,
+                    runSpacing: 16,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       ElevatedButton.icon(
                         onPressed: _isSearching ? null : _searchOnline,
@@ -220,9 +223,7 @@ class _CreateSongScreenState extends State<CreateSongScreen> {
                             : const Icon(Icons.search),
                         label: const Text("Search Online"),
                       ),
-                      const SizedBox(width: 16),
                       const Text("OR", style: TextStyle(color: VoxProTheme.textSecondary)),
-                      const SizedBox(width: 16),
                       ElevatedButton.icon(
                         onPressed: _pickLocalAudio,
                         icon: const Icon(Icons.folder),
