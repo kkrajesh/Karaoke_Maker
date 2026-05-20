@@ -57,8 +57,8 @@ A fully processed song folder contains:
 ### Key Screens
 * **`DashboardScreen` (`dashboard_screen.dart`)**: The main library view. It displays a list of processed songs. It features interactive "Component Chips" (Inst, Vocals, Pitch, Map, Lyrics) that are color-coded (Green = Ready, Red = Missing/Error, Orange = Processing). Users can tap these chips to granularly reprocess individual components (e.g., re-run the LLM translation or inject a manual text file) without regenerating the entire song.
 * **`CreateSongScreen` (`create_song_screen.dart`)**: A wizard-like UI for adding new songs. Users can search for a track, preview the URL, automatically fetch draft lyrics from the backend (to verify before committing), and then queue the song for full processing.
-* **`ActiveSessionScreen` (`active_session_screen.dart`)**: The Karaoke Player. It plays the instrumental track, renders scrolling, synchronized lyrics, and potentially visualizes the pitch profile.
-
+* **`ActiveSessionScreen` (`active_session_screen.dart`)**: The Karaoke Player. It plays the instrumental track, renders scrolling, synchronized lyrics, and potentially visualizes the pitch profile. It features an intelligent Dual-Pane Lyrics Engine (auto-adapting Stacked or Side-by-Side dual-language display).
+* **`SettingsScreen` (`settings_screen.dart`)**: Engineered as a non-interrupting Modal Dialog rather than a full page route, ensuring that modifying global app settings (like pitch curve colors) does not tear down active practice sessions or audio/lyric engines.
 ---
 
 ## System Workflows & Edge Cases

@@ -8,6 +8,7 @@ class LyricsPanel extends StatefulWidget {
   final Duration currentPosition;
   final String directoryPath;
   final void Function(Duration) onSeekRequested;
+  final bool isExpanded;
 
   const LyricsPanel({
     Key? key,
@@ -15,6 +16,7 @@ class LyricsPanel extends StatefulWidget {
     required this.currentPosition,
     required this.directoryPath,
     required this.onSeekRequested,
+    this.isExpanded = false,
   }) : super(key: key);
 
   @override
@@ -23,6 +25,7 @@ class LyricsPanel extends StatefulWidget {
 
 class _LyricsPanelState extends State<LyricsPanel> {
   final ScrollController _scrollController = ScrollController();
+  final ScrollController _altScrollController = ScrollController();
   final FocusNode _focusNode = FocusNode();
   bool _isAutoScrollEnabled = true;
   String _selectedLanguage = 'native'; // 'native' or 'english'
@@ -33,6 +36,7 @@ class _LyricsPanelState extends State<LyricsPanel> {
   @override
   void dispose() {
     _scrollController.dispose();
+    _altScrollController.dispose();
     _focusNode.dispose();
     super.dispose();
   }
@@ -59,9 +63,14 @@ class _LyricsPanelState extends State<LyricsPanel> {
   void _scrollToActiveLine() {
     if (_isSyncMode) {
       if (_scrollController.hasClients && _editIndex >= 0) {
-        final targetOffset = (_editIndex * 60.0) - 20.0;
+        final targetOffset = (_editIndex * 75.0) - 20.0;
         final clampedOffset = targetOffset.clamp(0.0, _scrollController.position.maxScrollExtent);
         _scrollController.animateTo(clampedOffset, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
+      }
+      if (_altScrollController.hasClients && _editIndex >= 0) {
+        final targetOffset = (_editIndex * 75.0) - 20.0;
+        final clampedOffset = targetOffset.clamp(0.0, _altScrollController.position.maxScrollExtent);
+        _altScrollController.animateTo(clampedOffset, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
       }
       return;
     }
@@ -80,17 +89,16 @@ class _LyricsPanelState extends State<LyricsPanel> {
     if (activeIndex != -1 && activeIndex != _lastActiveIndex) {
       _lastActiveIndex = activeIndex;
       
+      final targetOffset = (activeIndex * 75.0) - 20.0;
+      
       if (_scrollController.hasClients) {
-        // Using a fixed itemExtent of 60.0 guarantees mathematically flawless scrolling offset.
-        // We subtract a small amount (20.0) to keep it comfortably near the top.
-        final targetOffset = (activeIndex * 60.0) - 20.0;
         final clampedOffset = targetOffset.clamp(0.0, _scrollController.position.maxScrollExtent);
-        
-        _scrollController.animateTo(
-          clampedOffset,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-        );
+        _scrollController.animateTo(clampedOffset, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+      }
+      
+      if (_altScrollController.hasClients) {
+        final clampedOffset = targetOffset.clamp(0.0, _altScrollController.position.maxScrollExtent);
+        _altScrollController.animateTo(clampedOffset, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
       }
     }
   }
@@ -158,12 +166,17 @@ class _LyricsPanelState extends State<LyricsPanel> {
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: VoxProTheme.border),
         ),
-        child: Column(
-        children: [
-          // Header
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Row(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final bool showDual = widget.isExpanded || constraints.maxHeight >= 360;
+            final bool isPortrait = constraints.maxHeight > constraints.maxWidth;
+
+            return Column(
+              children: [
+                // Header
+                Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Row(
@@ -207,7 +220,7 @@ class _LyricsPanelState extends State<LyricsPanel> {
                       ),
                   ],
                 ),
-                if (hasNative && hasEnglish)
+                if (hasNative && hasEnglish && !showDual)
                   SegmentedButton<String>(
                     showSelectedIcon: false,
                     segments: const [
@@ -227,6 +240,16 @@ class _LyricsPanelState extends State<LyricsPanel> {
                       selectedBackgroundColor: VoxProTheme.accent,
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                     ),
+                  )
+                else if (!showDual)
+                  Text(
+                    hasNative ? 'Native Lyrics' : 'English Lyrics',
+                    style: const TextStyle(color: VoxProTheme.textSecondary, fontWeight: FontWeight.bold),
+                  )
+                else if (showDual && hasNative && hasEnglish)
+                  const Text(
+                    'Native  |  English',
+                    style: TextStyle(color: VoxProTheme.textSecondary, fontWeight: FontWeight.bold),
                   )
                 else
                   Text(
@@ -258,48 +281,77 @@ class _LyricsPanelState extends State<LyricsPanel> {
           
           // Lyrics List
           Expanded(
-            child: data == null || data.lines.isEmpty
+            child: (data == null || data.lines.isEmpty)
                 ? const Center(child: Text('No lyrics found', style: TextStyle(color: VoxProTheme.textSecondary)))
-                : NotificationListener<ScrollNotification>(
-                    onNotification: (notification) {
-                      if (notification is ScrollUpdateNotification && notification.dragDetails != null) {
-                        // User manually scrolled
-                        if (_isAutoScrollEnabled) {
-                          setState(() {
-                            _isAutoScrollEnabled = false;
-                          });
-                        }
-                      }
-                      return false;
-                    },
-                    child: ListView.builder(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.symmetric(vertical: 24.0, horizontal: 16.0),
-                      itemExtent: 60.0, // Fixed height makes scrolling math 100% accurate
-                      itemCount: data.lines.length,
-                      itemBuilder: (context, index) {
-                        final line = data.lines[index];
-                        final isPast = widget.currentPosition >= line.startTime;
-                        final isNext = index < data.lines.length - 1 && widget.currentPosition < data.lines[index + 1].startTime;
-                        final isActive = isPast && isNext;
-                        
-                        // Handle the last line specifically
-                        final isVeryLastLineActive = index == data.lines.length - 1 && isPast;
-                        final finalIsActive = isActive || isVeryLastLineActive;
+                : Builder(builder: (context) {
+                    if (showDual && hasNative && hasEnglish) {
+                      final primaryData = _selectedLanguage == 'native' ? widget.songLyrics.nativeData! : widget.songLyrics.englishData!;
+                      final secondaryData = _selectedLanguage == 'native' ? widget.songLyrics.englishData! : widget.songLyrics.nativeData!;
 
-                        return _buildRow(line, finalIsActive, isPast, index);
-                      },
-                    ),
-                  ),
+                      if (isPortrait) {
+                        return Column(
+                          children: [
+                            Expanded(child: _buildListView(primaryData, _scrollController, false, isDual: true)),
+                            const Divider(height: 1, color: VoxProTheme.border),
+                            Expanded(child: _buildListView(secondaryData, _altScrollController, true, isDual: true)),
+                          ],
+                        );
+                      } else {
+                        return Row(
+                          children: [
+                            Expanded(child: _buildListView(primaryData, _scrollController, false, isDual: true)),
+                            const VerticalDivider(width: 1, color: VoxProTheme.border),
+                            Expanded(child: _buildListView(secondaryData, _altScrollController, true, isDual: true)),
+                          ],
+                        );
+                      }
+                    } else {
+                      return _buildListView(data, _scrollController, false, isDual: false);
+                    }
+                }),
           ),
         ],
-      ),
+      );
+    }),
+    ),
+    );
+  }
+
+  Widget _buildListView(LyricsData data, ScrollController controller, bool isSecondary, {bool isDual = false}) {
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        if (notification is ScrollUpdateNotification && notification.dragDetails != null) {
+          if (_isAutoScrollEnabled) {
+            setState(() { _isAutoScrollEnabled = false; });
+          }
+        }
+        return false;
+      },
+      child: ListView.builder(
+        controller: controller,
+        padding: const EdgeInsets.symmetric(vertical: 24.0, horizontal: 16.0),
+        itemExtent: 75.0,
+        itemCount: data.lines.length,
+        itemBuilder: (context, index) {
+          final line = data.lines[index];
+          final isPast = widget.currentPosition >= line.startTime;
+          final isNext = index < data.lines.length - 1 && widget.currentPosition < data.lines[index + 1].startTime;
+          final isActive = isPast && isNext;
+          
+          final isVeryLastLineActive = index == data.lines.length - 1 && isPast;
+          final finalIsActive = isActive || isVeryLastLineActive;
+
+          return _buildRow(line, finalIsActive, isPast, index, isSecondary: isSecondary, isDual: isDual);
+        },
       ),
     );
   }
 
-  Widget _buildRow(LyricLine line, bool isActive, bool isPast, int index) {
+  Widget _buildRow(LyricLine line, bool isActive, bool isPast, int index, {bool isSecondary = false, bool isDual = false}) {
     if (!_isSyncMode) {
+      double fontSizeActive = isDual ? (isSecondary ? 18.0 : 22.0) : 18.0;
+      double fontSizeNormal = isDual ? (isSecondary ? 16.0 : 18.0) : 16.0;
+      
       return InkWell(
         onTap: () => widget.onSeekRequested(line.startTime),
         child: Container(
@@ -307,7 +359,7 @@ class _LyricsPanelState extends State<LyricsPanel> {
           child: Text(
             line.text,
             style: TextStyle(
-              fontSize: isActive ? 18.0 : 16.0,
+              fontSize: isActive ? fontSizeActive : fontSizeNormal,
               fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
               color: _getSingerColor(line.singerPart, isActive, isPast),
             ),

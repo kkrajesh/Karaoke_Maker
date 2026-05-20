@@ -39,6 +39,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
   bool _isPlaying = false;
   String _playbackMode = 'both'; // instrumental, vocals, both
   bool _showLyricsPanel = false;
+  bool _showPitchGraph = true;
   final MicPitchService _micService = MicPitchService();
   StreamSubscription<double>? _pitchSub;
   final List<Map<String, dynamic>> _userPitches = [];
@@ -581,6 +582,16 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                           tooltip: 'Toggle Lyrics Panel',
                         ),
                       IconButton(
+                        icon: Icon(_showPitchGraph ? Icons.show_chart : Icons.stacked_line_chart, size: 28),
+                        color: _showPitchGraph ? VoxProTheme.accent : VoxProTheme.textSecondary,
+                        onPressed: () {
+                          setState(() {
+                            _showPitchGraph = !_showPitchGraph;
+                          });
+                        },
+                        tooltip: 'Toggle Pitch Graph',
+                      ),
+                      IconButton(
                         icon: const Icon(Icons.search, size: 32),
                         color: VoxProTheme.textSecondary,
                         onPressed: () async {
@@ -707,22 +718,23 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                 ),
                 child: Stack(
                   children: [
-                    _targetPitchData.isEmpty 
-                        ? const Center(
-                            child: Text(
-                              'No pitch data available for this song.',
-                              style: TextStyle(color: VoxProTheme.textSecondary),
+                    if (_showPitchGraph)
+                      _targetPitchData.isEmpty 
+                          ? const Center(
+                              child: Text(
+                                'No pitch data available for this song.',
+                                style: TextStyle(color: VoxProTheme.textSecondary),
+                              ),
+                            )
+                          : PitchCanvas(
+                              currentPosition: _position,
+                              targetPitchData: _targetPitchData,
+                              vocalMapData: _vocalMapData,
+                              rootNote: _selectedRootNote,
+                              userPitchData: _userPitches,
+                              targetPitchColor: context.watch<SettingsService>().targetPitchColor,
+                              userPitchColor: context.watch<SettingsService>().userPitchColor,
                             ),
-                          )
-                        : PitchCanvas(
-                            currentPosition: _position,
-                            targetPitchData: _targetPitchData,
-                            vocalMapData: _vocalMapData,
-                            rootNote: _selectedRootNote,
-                            userPitchData: _userPitches,
-                            targetPitchColor: context.watch<SettingsService>().targetPitchColor,
-                            userPitchColor: context.watch<SettingsService>().userPitchColor,
-                          ),
                     
                     // Overlay Lyrics at the bottom of the canvas (only if panel is hidden)
                     if (!_showLyricsPanel && _songLyrics != null && _songLyrics!.hasAnyLyrics)
@@ -775,11 +787,11 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
           }
 
           final lyricsWidget = Container(
-            width: isNarrow ? null : 350,
-            height: isNarrow ? 250 : null,
+            width: isNarrow ? null : (!_showPitchGraph ? null : 350),
+            height: isNarrow ? (!_showPitchGraph ? null : 250) : null,
             margin: EdgeInsets.only(
               right: isNarrow ? 16.0 : 24.0,
-              left: isNarrow ? 16.0 : 0.0,
+              left: isNarrow ? 16.0 : (!_showPitchGraph ? 24.0 : 0.0),
               bottom: 8.0,
               top: 8.0,
             ),
@@ -787,6 +799,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
               songLyrics: _songLyrics!,
               currentPosition: _position,
               directoryPath: widget.selectedSong!.directoryPath,
+              isExpanded: !_showPitchGraph,
               onSeekRequested: (time) async {
                 await _audioPlayer.seek(time);
                 if (widget.selectedSong!.hasVocals) {
@@ -795,6 +808,10 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
               },
             ),
           );
+
+          if (!_showPitchGraph) {
+            return lyricsWidget;
+          }
 
           if (isNarrow) {
             return Column(

@@ -68,15 +68,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _buildSidebarItem(Icons.library_music, 'Library', 0),
           _buildSidebarItem(Icons.mic, 'Active Session', 1),
           const Spacer(),
-          _buildSidebarItem(Icons.settings, 'Settings', 2),
+          _buildSidebarItem(Icons.settings, 'Settings', 2, isDialog: true),
           const SizedBox(height: 16),
         ],
       ),
     );
   }
 
-  Widget _buildSidebarItem(IconData icon, String title, int index) {
-    final isActive = _selectedIndex == index;
+  Widget _buildSidebarItem(IconData icon, String title, int index, {bool isDialog = false}) {
+    final isActive = !isDialog && _selectedIndex == index;
     return ListTile(
       leading: Icon(icon, color: isActive ? VoxProTheme.accent : VoxProTheme.textSecondary),
       title: Text(
@@ -88,6 +88,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       selected: isActive,
       onTap: () {
+        if (isDialog && index == 2) {
+          showDialog(
+            context: context,
+            builder: (context) => const SettingsScreen(),
+          );
+          return;
+        }
         setState(() {
           _selectedIndex = index;
         });
@@ -462,9 +469,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       });
                     },
                   )
-                : _selectedIndex == 2
-                    ? const SettingsScreen()
-                    : _buildLibraryView(service),
+                : _buildLibraryView(service),
           ),
         ],
       ),

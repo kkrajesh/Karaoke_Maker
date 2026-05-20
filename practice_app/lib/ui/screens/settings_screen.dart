@@ -20,17 +20,16 @@ class SettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final settings = Provider.of<SettingsService>(context);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settings'),
-        backgroundColor: VoxProTheme.sidebar,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
+    return AlertDialog(
+      backgroundColor: VoxProTheme.cardBg,
+      title: const Text('Settings'),
+      content: SizedBox(
+        width: 400,
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Pitch Visualizer Colors', style: Theme.of(context).textTheme.headlineMedium),
+            Text('Pitch Visualizer Colors', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: VoxProTheme.textPrimary)),
             const SizedBox(height: 24),
             _buildColorSection(
               context,
@@ -48,6 +47,12 @@ class SettingsScreen extends StatelessWidget {
           ],
         ),
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close', style: TextStyle(color: VoxProTheme.textSecondary)),
+        )
+      ],
     );
   }
 
