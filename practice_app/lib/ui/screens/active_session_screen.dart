@@ -13,6 +13,7 @@ import '../widgets/song_search_dialog.dart';
 import '../widgets/lyrics_panel.dart';
 import '../widgets/practice/ab_loop_editor_dialog.dart';
 import '../widgets/practice/sequence_editor_dialog.dart';
+import '../widgets/practice/segmented_progress_bar.dart';
 import '../../services/mic_pitch_service.dart';
 import '../../services/settings_service.dart';
 import '../../services/performance_profile_service.dart';
@@ -57,6 +58,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
   bool _isSequenceMode = false;
   NamedSequence? _activeSequence;
   int _currentSequenceIndex = 0;
+  bool _isSeekingToEnforce = false;
   @override
   void initState() {
     super.initState();
@@ -106,29 +108,52 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
 
     _audioPlayer.onPositionChanged.listen((newPosition) {
       if (mounted) {
+        if (_isSeekingToEnforce) return;
+
         // Enforce Loop Mode
         if (_isLoopMode && _loopA != null && _loopB != null) {
           if (newPosition >= _loopB!) {
-            _audioPlayer.seek(_loopA!);
-            if (widget.selectedSong!.hasVocals) _vocalPlayer.seek(_loopA!);
+            _isSeekingToEnforce = true;
+            Future.microtask(() async {
+               await _audioPlayer.seek(_loopA!);
+               if (widget.selectedSong!.hasVocals) await _vocalPlayer.seek(_loopA!);
+               _isSeekingToEnforce = false;
+            });
             return;
           }
         }
         
         // Enforce Sequence Mode
         if (_isSequenceMode && _activeSequence != null && _activeSequence!.segments.isNotEmpty) {
-           final currentSegment = _activeSequence!.segments[_currentSequenceIndex];
-           if (newPosition >= currentSegment.end) {
-             _currentSequenceIndex++;
-             if (_currentSequenceIndex < _activeSequence!.segments.length) {
-                final nextSegment = _activeSequence!.segments[_currentSequenceIndex];
-                _audioPlayer.seek(nextSegment.start);
-                if (widget.selectedSong!.hasVocals) _vocalPlayer.seek(nextSegment.start);
+           if (_currentSequenceIndex < _activeSequence!.segments.length) {
+             final currentSegment = _activeSequence!.segments[_currentSequenceIndex];
+             
+             if (newPosition + const Duration(milliseconds: 300) < currentSegment.start) {
+                _isSeekingToEnforce = true;
+                Future.microtask(() async {
+                   await _audioPlayer.seek(currentSegment.start);
+                   if (widget.selectedSong!.hasVocals) await _vocalPlayer.seek(currentSegment.start);
+                   _isSeekingToEnforce = false;
+                });
                 return;
-             } else {
-                // Sequence finished
-                _audioPlayer.pause();
-                if (widget.selectedSong!.hasVocals) _vocalPlayer.pause();
+             }
+             
+             if (newPosition >= currentSegment.end) {
+               _currentSequenceIndex++;
+               if (_currentSequenceIndex < _activeSequence!.segments.length) {
+                  final nextSegment = _activeSequence!.segments[_currentSequenceIndex];
+                  _isSeekingToEnforce = true;
+                  Future.microtask(() async {
+                     await _audioPlayer.seek(nextSegment.start);
+                     if (widget.selectedSong!.hasVocals) await _vocalPlayer.seek(nextSegment.start);
+                     _isSeekingToEnforce = false;
+                  });
+                  return;
+               } else {
+                  // Sequence finished
+                  _audioPlayer.pause();
+                  if (widget.selectedSong!.hasVocals) _vocalPlayer.pause();
+               }
              }
            }
         }
@@ -225,6 +250,21 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
     return "$minutes:$seconds";
   }
 
+  void _jumpToActiveSequenceStart() async {
+    if (_isSequenceMode && _activeSequence != null && _activeSequence!.segments.isNotEmpty) {
+      final startPos = _activeSequence!.segments[0].start;
+      setState(() {
+        _currentSequenceIndex = 0;
+      });
+      _isSeekingToEnforce = true;
+      await _audioPlayer.seek(startPos);
+      if (widget.selectedSong != null && widget.selectedSong!.hasVocals) {
+        await _vocalPlayer.seek(startPos);
+      }
+      _isSeekingToEnforce = false;
+    }
+  }
+
   void _showABLoopEditor() {
     if (widget.selectedSong == null) return;
     showDialog(
@@ -314,6 +354,9 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                 _isSequenceMode = val;
                 if (_isSequenceMode) _isLoopMode = false;
               });
+              if (val) {
+                _jumpToActiveSequenceStart();
+              }
             },
             selectedColor: VoxProTheme.accent.withOpacity(0.3),
             avatar: const Icon(Icons.queue_music, size: 18),
@@ -350,13 +393,76 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                     _activeSequence = val;
                     _currentSequenceIndex = 0;
                   });
+                  _jumpToActiveSequenceStart();
                 },
               ),
             ),
+            if (_activeSequence != null && 
+                _activeSequence!.segments.isNotEmpty && 
+                _currentSequenceIndex >= 0 && 
+                _currentSequenceIndex < _activeSequence!.segments.length) ...[
+              TextButton(
+                onPressed: () {
+                  setState(() {
+                    _activeSequence!.segments[_currentSequenceIndex].start = _position;
+                  });
+                  if (_performanceProfile != null && widget.selectedSong != null) {
+                    PerformanceProfileService.saveProfile(widget.selectedSong!.directoryPath, _performanceProfile!);
+                  }
+                },
+                child: const Text('Set Start'),
+              ),
+              TextButton(
+                onPressed: () {
+                  setState(() {
+                    _activeSequence!.segments[_currentSequenceIndex].end = _position;
+                  });
+                  if (_performanceProfile != null && widget.selectedSong != null) {
+                    PerformanceProfileService.saveProfile(widget.selectedSong!.directoryPath, _performanceProfile!);
+                  }
+                },
+                child: const Text('Set End'),
+              ),
+            ],
             IconButton(
               icon: const Icon(Icons.edit, size: 18),
               onPressed: _showSequenceEditor,
             ),
+            if (_activeSequence != null)
+              IconButton(
+                icon: const Icon(Icons.delete, size: 18, color: Colors.redAccent),
+                onPressed: () async {
+                  // Confirm deletion
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      backgroundColor: VoxProTheme.cardBg,
+                      title: const Text('Delete Sequence?'),
+                      content: Text('Are you sure you want to delete "${_activeSequence!.name}"?'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(false),
+                          child: const Text('Cancel', style: TextStyle(color: VoxProTheme.textSecondary)),
+                        ),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+                          onPressed: () => Navigator.of(context).pop(true),
+                          child: const Text('Delete'),
+                        ),
+                      ],
+                    ),
+                  );
+
+                  if (confirmed == true && _performanceProfile != null && widget.selectedSong != null) {
+                    setState(() {
+                      _performanceProfile!.sequences.removeWhere((s) => s.name == _activeSequence!.name);
+                      _activeSequence = null;
+                      _currentSequenceIndex = 0;
+                    });
+                    await PerformanceProfileService.saveProfile(widget.selectedSong!.directoryPath, _performanceProfile!);
+                  }
+                },
+              ),
           ]
         ],
       ),
@@ -716,17 +822,52 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
             children: [
               Text(_formatDuration(_position), style: const TextStyle(color: VoxProTheme.textSecondary)),
               Expanded(
-                child: Slider(
-                  activeColor: VoxProTheme.accent,
-                  inactiveColor: VoxProTheme.border,
-                  min: 0,
-                  max: _duration.inSeconds.toDouble() > 0 ? _duration.inSeconds.toDouble() : 1,
-                  value: _position.inSeconds.toDouble().clamp(0, _duration.inSeconds.toDouble() > 0 ? _duration.inSeconds.toDouble() : 1),
-                  onChanged: (value) async {
-                    final newPosition = Duration(seconds: value.toInt());
+                child: SegmentedProgressBar(
+                  duration: _duration,
+                  position: _position,
+                  isLoopMode: _isLoopMode,
+                  loopA: _loopA,
+                  loopB: _loopB,
+                  isSequenceMode: _isSequenceMode,
+                  segments: _activeSequence?.segments ?? [],
+                  onSeek: (newPosition) async {
+                    if (_isSequenceMode && _activeSequence != null) {
+                      int newIdx = _activeSequence!.segments.indexWhere((seg) => newPosition < seg.end);
+                      if (newIdx == -1) newIdx = _activeSequence!.segments.length;
+                      setState(() {
+                         _currentSequenceIndex = newIdx;
+                      });
+                    }
+                    _isSeekingToEnforce = true;
                     await _audioPlayer.seek(newPosition);
                     if (widget.selectedSong!.hasVocals) {
                       await _vocalPlayer.seek(newPosition);
+                    }
+                    _isSeekingToEnforce = false;
+                  },
+                  onLoopChanged: (a, b) {
+                    setState(() {
+                      _loopA = a;
+                      _loopB = b;
+                    });
+                    if (_performanceProfile != null) {
+                      _performanceProfile!.lastAbLoop = PlaybackSegment(start: a, end: b);
+                    }
+                  },
+                  onSegmentsChanged: (newSegments) {
+                    if (_activeSequence != null) {
+                      setState(() {
+                        _activeSequence!.segments = newSegments;
+                      });
+                      if (_performanceProfile != null) {
+                        final idx = _performanceProfile!.sequences.indexWhere((e) => e.name == _activeSequence!.name);
+                        if (idx >= 0) _performanceProfile!.sequences[idx] = _activeSequence!;
+                      }
+                    }
+                  },
+                  onInteractionEnd: () async {
+                    if (_performanceProfile != null && widget.selectedSong != null) {
+                      await PerformanceProfileService.saveProfile(widget.selectedSong!.directoryPath, _performanceProfile!);
                     }
                   },
                 ),

@@ -145,7 +145,7 @@ class _SequenceEditorDialogState extends State<SequenceEditorDialog> {
           child: const Text('Cancel', style: TextStyle(color: VoxProTheme.textSecondary)),
         ),
         ElevatedButton(
-          style: ElevatedButton.styleFrom(backgroundColor: VoxProTheme.accent),
+          style: ElevatedButton.styleFrom(backgroundColor: VoxProTheme.accent, foregroundColor: Colors.black),
           onPressed: () {
             if (_nameController.text.trim().isEmpty) return;
             widget.onSave(NamedSequence(name: _nameController.text.trim(), segments: _segments));

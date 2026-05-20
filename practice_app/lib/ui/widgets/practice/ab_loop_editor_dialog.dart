@@ -99,7 +99,7 @@ class _ABLoopEditorDialogState extends State<ABLoopEditorDialog> {
           child: const Text('Cancel', style: TextStyle(color: VoxProTheme.textSecondary)),
         ),
         ElevatedButton(
-          style: ElevatedButton.styleFrom(backgroundColor: VoxProTheme.accent),
+          style: ElevatedButton.styleFrom(backgroundColor: VoxProTheme.accent, foregroundColor: Colors.black),
           onPressed: () {
             widget.onSave(_currentA, _currentB);
             Navigator.of(context).pop();

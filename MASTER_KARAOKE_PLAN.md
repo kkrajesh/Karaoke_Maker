@@ -71,6 +71,7 @@ This project is executed in **Linear Incremental Phases**. Each phase must be ve
     3. Add a responsive, auto-scrolling **Lyrics Panel** that parses `.txt` or `.lrc` files, allows language toggling, and mathematically guarantees accurate scrolling.
     4. Integrate **Sync Mode** with inline Multi-Singer assignment, allowing precise real-time `.lrc` generation and dual-language auto-syncing.
     5. Implement advanced **Practice Mode** featuring dynamic A-B looping and Multi-Segment Sequences, complete with precision millisecond UI editors and JSON profile persistence.
+    6. Build a custom **Interactive Segmented Progress Bar** allowing users to visually scrub, drag-to-resize, and drag-to-shift sequence segments directly on the timeline, with dynamic time overlays and anti-spam auto-seeking logic.
 
 ## 🚩 Phase 6: "Karaoke Night Live" Integration (FINAL)
 **Task:** Link the maker to the existing host app.
