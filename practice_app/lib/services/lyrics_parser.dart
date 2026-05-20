@@ -3,15 +3,16 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 class LyricLine {
-  final Duration startTime;
+  Duration startTime;
   final String text;
+  String? singerPart;
 
-  LyricLine({required this.startTime, required this.text});
+  LyricLine({required this.startTime, required this.text, this.singerPart});
 }
 
 class LyricsData {
   final List<LyricLine> lines;
-  final bool isSynced;
+  bool isSynced;
 
   LyricsData({required this.lines, required this.isSynced});
 }
@@ -60,6 +61,34 @@ class LyricsParser {
       meaningText = await meaningTxt.readAsString();
     }
 
+    // Cross-pollinate sync and singer data if line counts match
+    if (nativeData != null && englishData != null && nativeData.lines.length == englishData.lines.length) {
+      bool anySynced = nativeData.isSynced || englishData.isSynced;
+      for (int i = 0; i < nativeData.lines.length; i++) {
+        final nLine = nativeData.lines[i];
+        final eLine = englishData.lines[i];
+
+        // Sync timing
+        if (nLine.startTime > Duration.zero && eLine.startTime == Duration.zero) {
+          eLine.startTime = nLine.startTime;
+        } else if (eLine.startTime > Duration.zero && nLine.startTime == Duration.zero) {
+          nLine.startTime = eLine.startTime;
+        }
+
+        // Sync singer part
+        if (nLine.singerPart != null && eLine.singerPart == null) {
+          eLine.singerPart = nLine.singerPart;
+        } else if (eLine.singerPart != null && nLine.singerPart == null) {
+          nLine.singerPart = eLine.singerPart;
+        }
+      }
+
+      if (anySynced) {
+        nativeData.isSynced = true;
+        englishData.isSynced = true;
+      }
+    }
+
     return SongLyrics(nativeData: nativeData, englishData: englishData, meaningText: meaningText);
   }
 
@@ -82,7 +111,14 @@ class LyricsParser {
         
         final text = line.substring(match.end).trim();
         if (text.isNotEmpty) {
-          lines.add(LyricLine(startTime: time, text: text));
+          String? singerPart;
+          String cleanText = text;
+          if (cleanText.startsWith('[1]')) { singerPart = '1'; cleanText = cleanText.substring(3).trim(); }
+          else if (cleanText.startsWith('[2]')) { singerPart = '2'; cleanText = cleanText.substring(3).trim(); }
+          else if (cleanText.startsWith('[3]')) { singerPart = '3'; cleanText = cleanText.substring(3).trim(); }
+          else if (cleanText.startsWith('[B]')) { singerPart = 'B'; cleanText = cleanText.substring(3).trim(); }
+          
+          lines.add(LyricLine(startTime: time, text: cleanText, singerPart: singerPart));
         }
       }
     }
@@ -96,9 +132,36 @@ class LyricsParser {
     final List<LyricLine> lines = [];
     for (final line in LineSplitter.split(content)) {
       if (line.trim().isNotEmpty) {
-        lines.add(LyricLine(startTime: Duration.zero, text: line.trim()));
+          String? singerPart;
+          String cleanText = line.trim();
+          if (cleanText.startsWith('[1]')) { singerPart = '1'; cleanText = cleanText.substring(3).trim(); }
+          else if (cleanText.startsWith('[2]')) { singerPart = '2'; cleanText = cleanText.substring(3).trim(); }
+          else if (cleanText.startsWith('[3]')) { singerPart = '3'; cleanText = cleanText.substring(3).trim(); }
+          else if (cleanText.startsWith('[B]')) { singerPart = 'B'; cleanText = cleanText.substring(3).trim(); }
+          
+          lines.add(LyricLine(startTime: Duration.zero, text: cleanText, singerPart: singerPart));
       }
     }
     return LyricsData(lines: lines, isSynced: false);
+  }
+
+  static Future<void> saveLrc(String directoryPath, String language, LyricsData data) async {
+    final File file = File("$directoryPath${Platform.pathSeparator}lyrics_$language.lrc");
+    final StringBuffer sb = StringBuffer();
+    
+    for (final line in data.lines) {
+      final minutes = line.startTime.inMinutes.toString().padLeft(2, '0');
+      final seconds = (line.startTime.inSeconds % 60).toString().padLeft(2, '0');
+      final millis = (line.startTime.inMilliseconds % 1000 ~/ 10).toString().padLeft(2, '0');
+      
+      String prefix = "";
+      if (line.singerPart != null) {
+        prefix = "[${line.singerPart}] ";
+      }
+      
+      sb.writeln("[$minutes:$seconds.$millis]$prefix${line.text}");
+    }
+    
+    await file.writeAsString(sb.toString());
   }
 }

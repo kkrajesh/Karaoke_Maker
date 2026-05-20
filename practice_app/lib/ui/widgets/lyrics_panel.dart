@@ -1,15 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../services/lyrics_parser.dart';
 import '../theme/voxpro_theme.dart';
 
 class LyricsPanel extends StatefulWidget {
   final SongLyrics songLyrics;
   final Duration currentPosition;
+  final String directoryPath;
+  final void Function(Duration) onSeekRequested;
 
   const LyricsPanel({
     Key? key,
     required this.songLyrics,
     required this.currentPosition,
+    required this.directoryPath,
+    required this.onSeekRequested,
   }) : super(key: key);
 
   @override
@@ -18,13 +23,17 @@ class LyricsPanel extends StatefulWidget {
 
 class _LyricsPanelState extends State<LyricsPanel> {
   final ScrollController _scrollController = ScrollController();
+  final FocusNode _focusNode = FocusNode();
   bool _isAutoScrollEnabled = true;
   String _selectedLanguage = 'native'; // 'native' or 'english'
   int _lastActiveIndex = -1;
+  bool _isSyncMode = false;
+  int _editIndex = 0;
 
   @override
   void dispose() {
     _scrollController.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -48,6 +57,15 @@ class _LyricsPanelState extends State<LyricsPanel> {
   }
 
   void _scrollToActiveLine() {
+    if (_isSyncMode) {
+      if (_scrollController.hasClients && _editIndex >= 0) {
+        final targetOffset = (_editIndex * 60.0) - 20.0;
+        final clampedOffset = targetOffset.clamp(0.0, _scrollController.position.maxScrollExtent);
+        _scrollController.animateTo(clampedOffset, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
+      }
+      return;
+    }
+
     final data = _getActiveLyricsData();
     if (data == null || !data.isSynced) return;
 
@@ -77,6 +95,39 @@ class _LyricsPanelState extends State<LyricsPanel> {
     }
   }
 
+  Color _getSingerColor(String? singer, bool isActive, bool isPast) {
+    if (isActive) return VoxProTheme.accent;
+    if (isPast) return VoxProTheme.textSecondary.withOpacity(0.3);
+    
+    switch (singer) {
+      case '1': return Colors.blueAccent;
+      case '2': return Colors.pinkAccent;
+      case '3': return Colors.amber;
+      case 'B': return Colors.purpleAccent;
+      default: return VoxProTheme.textPrimary;
+    }
+  }
+
+  void _updateLine(int index, void Function(LyricLine) updater) {
+    if (widget.songLyrics.nativeData != null && index < widget.songLyrics.nativeData!.lines.length) {
+      updater(widget.songLyrics.nativeData!.lines[index]);
+    }
+    if (widget.songLyrics.englishData != null && index < widget.songLyrics.englishData!.lines.length) {
+      updater(widget.songLyrics.englishData!.lines[index]);
+    }
+  }
+
+  void _syncCurrentLine() {
+    final data = _getActiveLyricsData();
+    if (data == null || _editIndex >= data.lines.length) return;
+    
+    setState(() {
+      _updateLine(_editIndex, (line) => line.startTime = widget.currentPosition);
+      _editIndex++;
+    });
+    _scrollToActiveLine();
+  }
+
   @override
   Widget build(BuildContext context) {
     final data = _getActiveLyricsData();
@@ -91,13 +142,23 @@ class _LyricsPanelState extends State<LyricsPanel> {
       _selectedLanguage = 'native';
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        color: VoxProTheme.cardBg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: VoxProTheme.border),
-      ),
-      child: Column(
+    return Focus(
+      focusNode: _focusNode,
+      autofocus: true,
+      onKeyEvent: (node, event) {
+        if (_isSyncMode && event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.space) {
+          _syncCurrentLine();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: VoxProTheme.cardBg,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: VoxProTheme.border),
+        ),
+        child: Column(
         children: [
           // Header
           Padding(
@@ -105,6 +166,47 @@ class _LyricsPanelState extends State<LyricsPanel> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: Icon(_isSyncMode ? Icons.edit_off : Icons.edit),
+                      color: _isSyncMode ? VoxProTheme.vocalAccent : VoxProTheme.textSecondary,
+                      tooltip: 'Sync Mode',
+                      onPressed: () {
+                        setState(() {
+                          _isSyncMode = !_isSyncMode;
+                          if (_isSyncMode) {
+                            _isAutoScrollEnabled = false;
+                            _focusNode.requestFocus();
+                          } else {
+                            _isAutoScrollEnabled = true;
+                          }
+                        });
+                      }
+                    ),
+                    if (_isSyncMode)
+                      IconButton(
+                        icon: const Icon(Icons.save),
+                        color: Colors.greenAccent,
+                        tooltip: 'Save Lyrics',
+                        onPressed: () async {
+                          bool saved = false;
+                          if (widget.songLyrics.nativeData != null) {
+                            await LyricsParser.saveLrc(widget.directoryPath, 'native', widget.songLyrics.nativeData!);
+                            saved = true;
+                          }
+                          if (widget.songLyrics.englishData != null) {
+                            await LyricsParser.saveLrc(widget.directoryPath, 'english', widget.songLyrics.englishData!);
+                            saved = true;
+                          }
+                          if (saved && mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Lyrics saved!')));
+                          }
+                        }
+                      ),
+                  ],
+                ),
                 if (hasNative && hasEnglish)
                   SegmentedButton<String>(
                     showSelectedIcon: false,
@@ -185,28 +287,108 @@ class _LyricsPanelState extends State<LyricsPanel> {
                         final isVeryLastLineActive = index == data.lines.length - 1 && isPast;
                         final finalIsActive = isActive || isVeryLastLineActive;
 
-                        return Container(
-                          alignment: Alignment.center,
-                          child: Text(
-                            line.text,
-                            style: TextStyle(
-                              fontSize: finalIsActive ? 18.0 : 16.0,
-                              fontWeight: finalIsActive ? FontWeight.bold : FontWeight.normal,
-                              color: finalIsActive 
-                                  ? VoxProTheme.accent 
-                                  : (isPast ? VoxProTheme.textSecondary.withOpacity(0.3) : VoxProTheme.textPrimary),
-                            ),
-                            textAlign: TextAlign.center,
-                            maxLines: 2, // Allow wrapping but restrict to 2 lines to fit in 60px
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        );
+                        return _buildRow(line, finalIsActive, isPast, index);
                       },
                     ),
                   ),
           ),
         ],
       ),
+      ),
     );
+  }
+
+  Widget _buildRow(LyricLine line, bool isActive, bool isPast, int index) {
+    if (!_isSyncMode) {
+      return InkWell(
+        onTap: () => widget.onSeekRequested(line.startTime),
+        child: Container(
+          alignment: Alignment.center,
+          child: Text(
+            line.text,
+            style: TextStyle(
+              fontSize: isActive ? 18.0 : 16.0,
+              fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+              color: _getSingerColor(line.singerPart, isActive, isPast),
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      );
+    } else {
+      final isEditing = index == _editIndex;
+      final isSynced = line.startTime > Duration.zero;
+      
+      return Container(
+        color: isEditing ? Colors.white.withOpacity(0.05) : null,
+        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 45,
+              child: Text(
+                isSynced ? '${line.startTime.inMinutes}:${(line.startTime.inSeconds % 60).toString().padLeft(2, '0')}' : '--:--',
+                style: TextStyle(fontSize: 12, color: isSynced ? Colors.green : Colors.grey),
+              ),
+            ),
+            Expanded(
+              child: Text(
+                line.text,
+                style: TextStyle(
+                  fontSize: 16.0,
+                  color: _getSingerColor(line.singerPart, false, false),
+                  fontWeight: isEditing ? FontWeight.bold : FontWeight.normal,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            DropdownButtonHideUnderline(
+              child: DropdownButton<String?>(
+                value: line.singerPart,
+                icon: const Icon(Icons.person, size: 16, color: VoxProTheme.textSecondary),
+                dropdownColor: VoxProTheme.cardBg,
+                alignment: Alignment.centerRight,
+                style: const TextStyle(fontSize: 12),
+                items: const [
+                  DropdownMenuItem(value: null, child: Text('None', style: TextStyle(color: Colors.grey))),
+                  DropdownMenuItem(value: '1', child: Text('S1', style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold))),
+                  DropdownMenuItem(value: '2', child: Text('S2', style: TextStyle(color: Colors.pinkAccent, fontWeight: FontWeight.bold))),
+                  DropdownMenuItem(value: '3', child: Text('S3', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold))),
+                  DropdownMenuItem(value: 'B', child: Text('All', style: TextStyle(color: Colors.purpleAccent, fontWeight: FontWeight.bold))),
+                ],
+                onChanged: (val) {
+                  setState(() {
+                    _updateLine(index, (l) => l.singerPart = val);
+                  });
+                },
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.check_circle_outline, size: 20),
+              color: isEditing ? VoxProTheme.accent : Colors.grey,
+              onPressed: () {
+                setState(() {
+                  _updateLine(index, (l) => l.startTime = widget.currentPosition);
+                  _editIndex = index + 1;
+                });
+                _scrollToActiveLine();
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.clear, size: 20),
+              color: Colors.redAccent,
+              onPressed: () {
+                setState(() {
+                  _updateLine(index, (l) => l.startTime = Duration.zero);
+                });
+              },
+            ),
+          ],
+        ),
+      );
+    }
   }
 }

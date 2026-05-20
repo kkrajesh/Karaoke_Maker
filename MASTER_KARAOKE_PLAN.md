@@ -63,12 +63,14 @@ This project is executed in **Linear Incremental Phases**. Each phase must be ve
 * **Sync:** Verify folder-reading on Android via OneSync/FolderSync.
 
 ## ✅ Phase 5: Live Pitch Visualizer Engine (COMPLETED)
-**Task:** Real-time interactive feedback.
-* **UI:** `practice_app/widgets/pitch_canvas.dart` & `lyrics_panel.dart`.
+**Task:** Real-time interactive feedback & Practice Tools.
+* **UI:** `practice_app/widgets/pitch_canvas.dart`, `lyrics_panel.dart`, and Practice Tool Dialogs.
 * **Action:** 
     1. Capture low-latency Mic input using `record` and extract frequency using `pitch_detector_dart`.
     2. Plot user pitch dots over the `pitch_profile.json` target line on a scrolling `CustomPainter` canvas.
-    3. Add a responsive, auto-scrolling **Lyrics Panel** next to the pitch canvas that parses `.txt` or `.lrc` files, allows language toggling, and mathematically guarantees accurate scrolling using fixed `itemExtent`.
+    3. Add a responsive, auto-scrolling **Lyrics Panel** that parses `.txt` or `.lrc` files, allows language toggling, and mathematically guarantees accurate scrolling.
+    4. Integrate **Sync Mode** with inline Multi-Singer assignment, allowing precise real-time `.lrc` generation and dual-language auto-syncing.
+    5. Implement advanced **Practice Mode** featuring dynamic A-B looping and Multi-Segment Sequences, complete with precision millisecond UI editors and JSON profile persistence.
 
 ## 🚩 Phase 6: "Karaoke Night Live" Integration (FINAL)
 **Task:** Link the maker to the existing host app.

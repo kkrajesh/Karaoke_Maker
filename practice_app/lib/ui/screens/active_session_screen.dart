@@ -11,9 +11,11 @@ import 'package:provider/provider.dart';
 import '../../services/file_explorer_service.dart';
 import '../widgets/song_search_dialog.dart';
 import '../widgets/lyrics_panel.dart';
+import '../widgets/practice/ab_loop_editor_dialog.dart';
+import '../widgets/practice/sequence_editor_dialog.dart';
 import '../../services/mic_pitch_service.dart';
 import '../../services/settings_service.dart';
-
+import '../../services/performance_profile_service.dart';
 class ActiveSessionScreen extends StatefulWidget {
   final Song? selectedSong;
   final Function(Song)? onSongSwitched;
@@ -46,6 +48,15 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
   SongLyrics? _songLyrics;
   String _selectedRootNote = 'C';
 
+  // Practice Mode State
+  PerformanceProfile? _performanceProfile;
+  bool _isLoopMode = false;
+  Duration? _loopA;
+  Duration? _loopB;
+  
+  bool _isSequenceMode = false;
+  NamedSequence? _activeSequence;
+  int _currentSequenceIndex = 0;
   @override
   void initState() {
     super.initState();
@@ -95,6 +106,33 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
 
     _audioPlayer.onPositionChanged.listen((newPosition) {
       if (mounted) {
+        // Enforce Loop Mode
+        if (_isLoopMode && _loopA != null && _loopB != null) {
+          if (newPosition >= _loopB!) {
+            _audioPlayer.seek(_loopA!);
+            if (widget.selectedSong!.hasVocals) _vocalPlayer.seek(_loopA!);
+            return;
+          }
+        }
+        
+        // Enforce Sequence Mode
+        if (_isSequenceMode && _activeSequence != null && _activeSequence!.segments.isNotEmpty) {
+           final currentSegment = _activeSequence!.segments[_currentSequenceIndex];
+           if (newPosition >= currentSegment.end) {
+             _currentSequenceIndex++;
+             if (_currentSequenceIndex < _activeSequence!.segments.length) {
+                final nextSegment = _activeSequence!.segments[_currentSequenceIndex];
+                _audioPlayer.seek(nextSegment.start);
+                if (widget.selectedSong!.hasVocals) _vocalPlayer.seek(nextSegment.start);
+                return;
+             } else {
+                // Sequence finished
+                _audioPlayer.pause();
+                if (widget.selectedSong!.hasVocals) _vocalPlayer.pause();
+             }
+           }
+        }
+
         setState(() {
           _position = newPosition;
         });
@@ -157,6 +195,20 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
           _songLyrics = lyrics;
         });
       }
+      
+      // Load Performance Profile
+      _performanceProfile = await PerformanceProfileService.loadProfile(widget.selectedSong!.directoryPath);
+      if (_performanceProfile!.lastAbLoop != null) {
+        _loopA = _performanceProfile!.lastAbLoop!.start;
+        _loopB = _performanceProfile!.lastAbLoop!.end;
+      } else {
+        _loopA = null;
+        _loopB = null;
+      }
+      _isLoopMode = false;
+      _isSequenceMode = false;
+      _activeSequence = null;
+
       // Load vocals if available
       if (widget.selectedSong!.hasVocals) {
         final String vocalPath = "${widget.selectedSong!.directoryPath}${Platform.pathSeparator}vocals.wav";
@@ -173,17 +225,184 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
     return "$minutes:$seconds";
   }
 
-  String _getCurrentLyric(LyricsData? data) {
-    if (data == null || data.lines.isEmpty) return "";
-    if (!data.isSynced) return "Lyrics available (unsynced)";
+  void _showABLoopEditor() {
+    if (widget.selectedSong == null) return;
+    showDialog(
+      context: context,
+      builder: (context) => ABLoopEditorDialog(
+        totalDuration: _duration,
+        initialA: _loopA ?? _position,
+        initialB: _loopB ?? (_position + const Duration(seconds: 10)),
+        onSave: (a, b) async {
+          setState(() {
+            _loopA = a;
+            _loopB = b;
+            _isLoopMode = true;
+            _isSequenceMode = false;
+          });
+          
+          if (_performanceProfile != null) {
+            _performanceProfile!.lastAbLoop = PlaybackSegment(start: a, end: b);
+            await PerformanceProfileService.saveProfile(widget.selectedSong!.directoryPath, _performanceProfile!);
+          }
+        },
+      ),
+    );
+  }
+
+  void _showSequenceEditor() {
+    if (widget.selectedSong == null) return;
+    showDialog(
+      context: context,
+      builder: (context) => SequenceEditorDialog(
+        totalDuration: _duration,
+        initialSequence: _activeSequence,
+        onSave: (seq) async {
+          setState(() {
+            _activeSequence = seq;
+            _isSequenceMode = true;
+            _isLoopMode = false;
+            _currentSequenceIndex = 0;
+            
+            if (_performanceProfile != null) {
+              // Update or add sequence
+              final idx = _performanceProfile!.sequences.indexWhere((e) => e.name == seq.name);
+              if (idx >= 0) {
+                _performanceProfile!.sequences[idx] = seq;
+              } else {
+                _performanceProfile!.sequences.add(seq);
+              }
+            }
+          });
+          
+          if (_performanceProfile != null) {
+            await PerformanceProfileService.saveProfile(widget.selectedSong!.directoryPath, _performanceProfile!);
+          }
+        },
+      ),
+    );
+  }
+
+  Widget _buildPracticeToolbar() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          FilterChip(
+            label: const Text('A-B Loop'),
+            selected: _isLoopMode,
+            onSelected: (val) {
+              setState(() {
+                _isLoopMode = val;
+                if (_isLoopMode) _isSequenceMode = false;
+                if (_isLoopMode && _loopA == null) {
+                  _loopA = _position;
+                  _loopB = _position + const Duration(seconds: 10);
+                }
+              });
+            },
+            selectedColor: VoxProTheme.accent.withOpacity(0.3),
+            avatar: const Icon(Icons.repeat, size: 18),
+          ),
+          const SizedBox(width: 8),
+          FilterChip(
+            label: const Text('Sequence'),
+            selected: _isSequenceMode,
+            onSelected: (val) {
+              setState(() {
+                _isSequenceMode = val;
+                if (_isSequenceMode) _isLoopMode = false;
+              });
+            },
+            selectedColor: VoxProTheme.accent.withOpacity(0.3),
+            avatar: const Icon(Icons.queue_music, size: 18),
+          ),
+          const SizedBox(width: 16),
+          if (_isLoopMode) ...[
+            TextButton(
+              onPressed: () => setState(() => _loopA = _position),
+              child: const Text('Set A'),
+            ),
+            TextButton(
+              onPressed: () => setState(() => _loopB = _position),
+              child: const Text('Set B'),
+            ),
+            IconButton(
+              icon: const Icon(Icons.edit, size: 18),
+              onPressed: _showABLoopEditor,
+            ),
+          ],
+          if (_isSequenceMode) ...[
+            DropdownButtonHideUnderline(
+              child: DropdownButton<NamedSequence>(
+                value: _activeSequence,
+                hint: const Text('Select Sequence', style: TextStyle(color: VoxProTheme.textSecondary, fontSize: 14)),
+                dropdownColor: VoxProTheme.cardBg,
+                items: (_performanceProfile?.sequences ?? []).map((seq) {
+                  return DropdownMenuItem(
+                    value: seq,
+                    child: Text(seq.name, style: const TextStyle(fontSize: 14)),
+                  );
+                }).toList(),
+                onChanged: (val) {
+                  setState(() {
+                    _activeSequence = val;
+                    _currentSequenceIndex = 0;
+                  });
+                },
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.edit, size: 18),
+              onPressed: _showSequenceEditor,
+            ),
+          ]
+        ],
+      ),
+    );
+  }
+
+  Color _getSingerColor(String? singer, {bool isUpcoming = false}) {
+    Color baseColor;
+    switch (singer) {
+      case '1': baseColor = Colors.blueAccent; break;
+      case '2': baseColor = Colors.pinkAccent; break;
+      case '3': baseColor = Colors.amber; break;
+      case 'B': baseColor = Colors.purpleAccent; break;
+      default: baseColor = VoxProTheme.textPrimary;
+    }
+    return isUpcoming ? baseColor.withOpacity(0.6) : baseColor;
+  }
+
+  List<LyricLine> _getActiveLines(LyricsData? data) {
+    if (data == null || data.lines.isEmpty) return [];
+    if (!data.isSynced) {
+      return [LyricLine(startTime: Duration.zero, text: "Lyrics available (unsynced)")];
+    }
     
-    // Find the current active line
+    int activeIndex = -1;
     for (int i = data.lines.length - 1; i >= 0; i--) {
       if (_position >= data.lines[i].startTime) {
-        return data.lines[i].text;
+        activeIndex = i;
+        break;
       }
     }
-    return "";
+    
+    List<LyricLine> lines = [];
+    if (activeIndex != -1) {
+      lines.add(data.lines[activeIndex]);
+    } else if (data.lines.isNotEmpty) {
+      // Empty placeholder for the active line so the next line renders correctly
+      lines.add(LyricLine(startTime: Duration.zero, text: ""));
+    }
+    
+    int nextIndex = activeIndex == -1 ? 0 : activeIndex + 1;
+    if (nextIndex < data.lines.length) {
+      lines.add(data.lines[nextIndex]);
+    }
+    
+    return lines;
   }
 
   @override
@@ -409,31 +628,35 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         if (_songLyrics!.nativeData != null)
-                          Text(
-                            _getCurrentLyric(_songLyrics!.nativeData),
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.normal,
-                              color: VoxProTheme.textSecondary.withOpacity(0.8),
-                              shadows: const [
-                                Shadow(blurRadius: 4.0, color: Colors.black, offset: Offset(0, 1)),
-                              ],
-                            ),
-                          ),
+                          ..._getActiveLines(_songLyrics!.nativeData).asMap().entries.map((entry) {
+                            bool isCurrent = entry.key == 0 && entry.value.text.isNotEmpty;
+                            return Text(
+                              entry.value.text,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: isCurrent ? 18 : 14,
+                                fontWeight: isCurrent ? FontWeight.w600 : FontWeight.normal,
+                                color: _getSingerColor(entry.value.singerPart, isUpcoming: !isCurrent),
+                                shadows: const [Shadow(blurRadius: 4.0, color: Colors.black, offset: Offset(0, 1))],
+                              ),
+                            );
+                          }),
+                        if (_songLyrics!.englishData != null && _songLyrics!.nativeData != null)
+                          const SizedBox(height: 8),
                         if (_songLyrics!.englishData != null)
-                          Text(
-                            _getCurrentLyric(_songLyrics!.englishData),
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 28,
-                              fontWeight: FontWeight.bold,
-                              color: VoxProTheme.textPrimary,
-                              shadows: [
-                                Shadow(blurRadius: 8.0, color: Colors.black87, offset: Offset(0, 2)),
-                              ],
-                            ),
-                          ),
+                          ..._getActiveLines(_songLyrics!.englishData).asMap().entries.map((entry) {
+                            bool isCurrent = entry.key == 0 && entry.value.text.isNotEmpty;
+                            return Text(
+                              entry.value.text,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: isCurrent ? 26 : 18,
+                                fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                                color: _getSingerColor(entry.value.singerPart, isUpcoming: !isCurrent),
+                                shadows: const [Shadow(blurRadius: 8.0, color: Colors.black87, offset: Offset(0, 2))],
+                              ),
+                            );
+                          }),
                       ],
                     ),
                   ),
@@ -457,6 +680,13 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
             child: LyricsPanel(
               songLyrics: _songLyrics!,
               currentPosition: _position,
+              directoryPath: widget.selectedSong!.directoryPath,
+              onSeekRequested: (time) async {
+                await _audioPlayer.seek(time);
+                if (widget.selectedSong!.hasVocals) {
+                  await _vocalPlayer.seek(time);
+                }
+              },
             ),
           );
 
@@ -506,11 +736,16 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
           ),
         ),
 
+        // Practice Toolbar
+        _buildPracticeToolbar(),
+
         // Controls
         Container(
           padding: const EdgeInsets.only(bottom: 24.0, left: 24.0, right: 24.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          child: Wrap(
+            alignment: WrapAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8.0, // Used instead of fixed SizedBoxes for Wrap
             children: [
               IconButton(
                 icon: const Icon(Icons.skip_previous, size: 36),
