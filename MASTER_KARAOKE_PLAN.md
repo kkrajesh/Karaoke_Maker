@@ -74,6 +74,7 @@ This project is executed in **Linear Incremental Phases**. Each phase must be ve
     6. Build a custom **Interactive Segmented Progress Bar** allowing users to visually scrub, drag-to-resize, and drag-to-shift sequence segments directly on the timeline, with dynamic time overlays and anti-spam auto-seeking logic.
     7. **Dual-Pane Lyrics Engine:** Intelligent responsive dual-language display that automatically switches between Portrait (Top/Bottom Stacked) and Landscape (Side-by-Side) synchronized lists when enough vertical space is available.
     8. **Non-Interrupting Settings Architecture:** Converted full-screen settings into seamless modal popups to guarantee that active practice sessions and audio engines remain mounted and undisrupted during configuration changes.
+    9. **Intelligent UI Guards:** Dashboard UI contextually parses missing data (audio stems, pitch json, lyrics, video paths) and gracefully disables controls with contextual tooltips to prevent breaking states while maintaining visual consistency.
 
 ## 🚩 Phase 6: "Karaoke Night Live" Integration (FINAL)
 **Task:** Link the maker to the existing host app.
