@@ -76,10 +76,20 @@ This project is executed in **Linear Incremental Phases**. Each phase must be ve
     8. **Non-Interrupting Settings Architecture:** Converted full-screen settings into seamless modal popups to guarantee that active practice sessions and audio engines remain mounted and undisrupted during configuration changes.
     9. **Intelligent UI Guards:** Dashboard UI contextually parses missing data (audio stems, pitch json, lyrics, video paths) and gracefully disables controls with contextual tooltips to prevent breaking states while maintaining visual consistency.
 
-## 🚩 Phase 6: "Karaoke Night Live" Integration (FINAL)
+## 🚩 Phase 6: Universal Search Engine (COMPLETED)
+**Task:** Decouple Search Logic for Cross-Platform Reusability.
+* **Component:** `UnifiedSearchUI` and `VoxSearchProvider` within `vox_player_core`.
+* **Action:**
+    1. Built a robust search interface capable of running concurrent futures across multiple injected search providers (e.g., Local Database, Cloud Sheets, Online).
+    2. Implemented an `AnimatedSize` intelligent accordion for inline playback previews.
+    3. Fully integrated `media_kit` hardware-accelerated video scaling for a cinematic preview experience, alongside a sleek slider widget for audio-only file streams.
+    4. Engineered a strictly decoupled `SearchResultActionBuilder` so host apps handle the business logic (Singer role "Sign up to Sing" vs. Requester role "Request").
+
+## 🚩 Phase 7: "Karaoke Night Live" Integration (FINAL)
 **Task:** Link the maker to the existing host app.
 * **Action:** 1. Modify the Host App's `Song` model to include `pitchDataUrl`.
     2. Add a "Practice Mode" toggle in the Singer Dashboard that pulls these AI assets.
+    3. Inject host-specific implementation of `VoxSearchProvider` into the `UnifiedSearchUI`.
 
 ---
 
