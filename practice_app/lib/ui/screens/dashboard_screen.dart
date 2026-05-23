@@ -5,7 +5,6 @@ import 'package:file_picker/file_picker.dart';
 import '../../services/api_service.dart';
 import '../../services/file_explorer_service.dart';
 import '../theme/voxpro_theme.dart';
-import '../../services/file_explorer_service.dart';
 import '../../models/song.dart';
 import 'active_session_screen.dart';
 import 'create_song_screen.dart';
@@ -220,31 +219,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 LocalDirectorySearchProvider(baseDirectoryPath: localPath),
               ],
               actionBuilder: (context, result) {
-                return ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: VoxProTheme.vocalAccent),
-                  onPressed: () {
-                    Navigator.pop(context); // close dialog
-                    // We need to construct a Song object or navigate to ActiveSessionScreen
-                    // If it is a local file, we can look up the matching Song from FileExplorerService
-                    if (result.sourceType != 'youtube') {
-                      // Attempt to find the song in library
-                      final foundSong = service.songs.firstWhere(
-                        (s) => result.url != null && result.url!.startsWith(s.directoryPath),
-                        orElse: () => Song(title: result.title, directoryPath: result.url ?? ''),
-                      );
-                      setState(() {
-                        _selectedSong = foundSong;
-                        _selectedIndex = 1;
-                      });
-                    } else {
-                       // Direct youtube play
-                       setState(() {
-                         _selectedSong = Song(title: result.title, directoryPath: result.url ?? '');
-                         _selectedIndex = 1;
-                       });
-                    }
-                  },
-                  child: const Text('Play', style: TextStyle(color: Colors.white)),
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AiQueueButton(result: result, isVisible: true),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: VoxProTheme.vocalAccent),
+                      onPressed: () {
+                        Navigator.pop(context); // close dialog
+                        if (result.sourceType != 'youtube') {
+                          final foundSong = service.songs.firstWhere(
+                            (s) => result.url != null && result.url!.startsWith(s.directoryPath),
+                            orElse: () => Song(title: result.title, directoryPath: result.url ?? ''),
+                          );
+                          setState(() {
+                            _selectedSong = foundSong;
+                            _selectedIndex = 1;
+                          });
+                        } else {
+                           setState(() {
+                             _selectedSong = Song(title: result.title, directoryPath: result.url ?? '');
+                             _selectedIndex = 1;
+                           });
+                        }
+                      },
+                      child: const Text('Play', style: TextStyle(color: Colors.white)),
+                    ),
+                  ],
                 );
               },
             ),

@@ -7,7 +7,7 @@ VoxPro (the `practice_app`) is the frontend Flutter desktop application for the 
 
 ## 🚀 Features
 
-- **Automated Library Scanning**: Uses `file_picker` and `es.exe` (Voidtools Everything) via `vox_player_core` to instantly scan your `ONEDRIVE_HOT_ZONE`.
+- **Automated Library Scanning**: Uses `file_picker` and `MMDB` (MediaMonkey) via `vox_player_core` to instantly scan your `ONEDRIVE_HOT_ZONE`. (Transitioning from `es.exe` in Phase 9).
 - **Smart Component Cards**: Displays interactive badges on songs indicating the availability of Instrumental tracks, Vocal tracks, Pitch Profiles, and Lyrics.
 - **Global Quick Search & Filtering**: Features an instantly filtering search bar via `UnifiedSearchUI` with tri-state filters (Vocals, Instrumental, Pitch Data, Video).
 - **Active Practice Session**: A dedicated UI shell powered by `VoxPlayerDashboard` that loads the `instrumental.wav` and provides scrubbable, fully functional media controls using `media_kit`.

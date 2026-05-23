@@ -188,6 +188,18 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                       ],
                     ),
                   ),
+                  Builder(
+                    builder: (context) {
+                      final result = VoxSearchResult(
+                        id: widget.selectedSong!.id,
+                        title: widget.selectedSong!.title,
+                        artist: '',
+                        url: widget.selectedSong!.directoryPath,
+                        sourceType: widget.selectedSong!.directoryPath.startsWith('http') ? 'youtube' : 'LocalDirectory',
+                      );
+                      return AiQueueButton(result: result, isVisible: true);
+                    },
+                  ),
                 ],
               ),
             ],

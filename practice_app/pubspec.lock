@@ -939,7 +939,7 @@ packages:
       path: "../../vox_player_core"
       relative: true
     source: path
-    version: "0.0.2"
+    version: "0.0.3"
   wakelock_plus:
     dependency: transitive
     description:
