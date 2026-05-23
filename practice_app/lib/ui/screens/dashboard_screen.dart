@@ -12,6 +12,7 @@ import 'create_song_screen.dart';
 import 'settings_screen.dart';
 import '../widgets/song_card.dart';
 import '../widgets/song_list_tile.dart';
+import 'package:vox_player_core/vox_player_core.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -194,6 +195,60 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             );
           }
+        );
+      },
+    );
+  }
+
+  void _showUnifiedSearch() {
+    final service = Provider.of<FileExplorerService>(context, listen: false);
+    final localPath = service.currentDirectory ?? 'C:\\'; // default if none selected
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: VoxProTheme.cardBg,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Container(
+            width: 800,
+            height: 600,
+            padding: const EdgeInsets.all(16),
+            child: UnifiedSearchUI(
+              providers: [
+                YoutubeSearchProvider(),
+                LocalDirectorySearchProvider(baseDirectoryPath: localPath),
+              ],
+              actionBuilder: (context, result) {
+                return ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: VoxProTheme.vocalAccent),
+                  onPressed: () {
+                    Navigator.pop(context); // close dialog
+                    // We need to construct a Song object or navigate to ActiveSessionScreen
+                    // If it is a local file, we can look up the matching Song from FileExplorerService
+                    if (result.sourceType != 'youtube') {
+                      // Attempt to find the song in library
+                      final foundSong = service.songs.firstWhere(
+                        (s) => result.url != null && result.url!.startsWith(s.directoryPath),
+                        orElse: () => Song(title: result.title, directoryPath: result.url ?? ''),
+                      );
+                      setState(() {
+                        _selectedSong = foundSong;
+                        _selectedIndex = 1;
+                      });
+                    } else {
+                       // Direct youtube play
+                       setState(() {
+                         _selectedSong = Song(title: result.title, directoryPath: result.url ?? '');
+                         _selectedIndex = 1;
+                       });
+                    }
+                  },
+                  child: const Text('Play', style: TextStyle(color: Colors.white)),
+                );
+              },
+            ),
+          ),
         );
       },
     );
@@ -450,6 +505,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
             color: VoxProTheme.accent,
           ),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.search),
+            color: VoxProTheme.textSecondary,
+            tooltip: 'Unified Search',
+            onPressed: _showUnifiedSearch,
+          ),
+          const SizedBox(width: 16),
+        ],
       ),
       body: Row(
         children: [

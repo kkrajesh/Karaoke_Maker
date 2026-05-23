@@ -4,9 +4,12 @@ import 'services/file_explorer_service.dart';
 import 'ui/theme/voxpro_theme.dart';
 import 'ui/screens/dashboard_screen.dart';
 
+import 'package:vox_player_core/vox_player_core.dart';
 import 'services/settings_service.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  VoxPlayerCore.ensureInitialized();
   runApp(
     MultiProvider(
       providers: [
