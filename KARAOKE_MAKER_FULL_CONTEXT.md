@@ -27,17 +27,17 @@ The system is composed of two primary layers:
 * **`vocal_activity_analyzer.py`**: Analyzes the isolated vocals to generate a `vocal_map.json`, defining exact timestamps where vocals are active (used for UI scoring/visualization).
 * **`run_demucs.py`**: A custom wrapper for the `htdemucs` model that bypasses missing `torchcodec` dependencies to successfully split the audio into `vocals.wav` and `instrumental.wav`.
 
-### Data Structure (The "Hot Zone")
-Processed songs are stored in a designated "Hot Zone" directory (e.g., `C:/Users/.../ActiveKaraoke/`). Each song gets its own folder named after the `song_id`.
+### Data Structure (SQLite & AI Vault)
+Processed songs are stored in a designated AI Vault directory. The system no longer relies on brittle folder-name scanning. Instead, `vox_ai_db.dart` (using `sqflite_common_ffi`) securely maps MediaMonkey DB IDs to specific AI Artifact folders.
 A fully processed song folder contains:
 * `original.wav` - The raw downloaded audio.
 * `vocals.wav` - Isolated vocal track.
 * `instrumental.wav` - Isolated instrumental/karaoke track.
 * `pitch_profile.json` - Frequency data over time.
 * `vocal_map.json` - Boolean vocal activity map.
-* `lyrics_native.txt` or `.lrc` - Original lyrics (often in native script).
-* `lyrics_english.txt` or `.lrc` - Transliterated lyrics (Latin alphabet).
-* `lyrics_meaning.txt` - LLM-generated English poetic meaning of the song.
+* `*_lyrics_native.txt` or `.lrc` - Original lyrics (often in native script).
+* `*_lyrics_english.txt` or `.lrc` - Transliterated lyrics (Latin alphabet).
+* `*_lyrics_meaning.txt` - LLM-generated English poetic meaning of the song.
 
 ---
 
@@ -45,19 +45,17 @@ A fully processed song folder contains:
 
 ### Technology Stack
 * **Framework**: Flutter (Dart)
-* **State Management/Architecture**: Standard Stateful/Stateless Widgets, heavily reliant on Service Singletons.
-* **Key Packages**: `audioplayers` (Playback), `file_picker` (Local file injection), `http` (API integration).
+* **Architecture**: The UI and core player logic have been successfully extracted into the decoupled `vox_player_core` package. The Practice App now acts as a lightweight wrapper integrating the universal package.
+* **Key Packages**: `vox_player_core`, `sqflite_common_ffi` (for MM.DB sync).
 
 ### Architecture & Key Components
-* **`lib/models/song.dart`**: The core data model. Determines a song's status (Ready, Processing, Error) by checking the existence of required files in its Hot Zone folder. It exposes boolean getters (e.g., `hasInstrumental`, `hasEnglishLyrics`) to drive the UI.
-* **`lib/services/api_service.dart`**: Communicates with the Flask backend. Handles polling for task status and triggering `/process` and `/reprocess` endpoints.
-* **`lib/services/file_explorer_service.dart`**: The bridge between the filesystem and the app. It recursively scans the Hot Zone directory to build the user's `SongLibrary`. It also tracks background processing tasks to seamlessly update UI state when backend tasks complete.
-* **`lib/services/lyrics_parser.dart`**: Parses raw `.txt` or `.lrc` (Lyric Timing) files into structured Dart objects (`LyricsData`, `LyricLine`) for synchronized rendering.
+* **`lib/models/song.dart`**: The core data model representing a MediaMonkey song, enriched with AI Vault metadata.
+* **`lib/services/file_explorer_service.dart`**: Scans the MediaMonkey DB and queries the `VoxAiTrackingService` to see which songs have AI artifacts available.
 
 ### Key Screens
-* **`DashboardScreen` (`dashboard_screen.dart`)**: The main library view. It displays a list of processed songs. It features interactive "Component Chips" (Inst, Vocals, Pitch, Map, Lyrics) that are color-coded (Green = Ready, Red = Missing/Error, Orange = Processing). Users can tap these chips to granularly reprocess individual components (e.g., re-run the LLM translation or inject a manual text file) without regenerating the entire song.
-* **`CreateSongScreen` (`create_song_screen.dart`)**: A wizard-like UI for adding new songs. Users can search for a track, preview the URL, automatically fetch draft lyrics from the backend (to verify before committing), and then queue the song for full processing.
-* **`ActiveSessionScreen` (`active_session_screen.dart`)**: The Karaoke Player. It plays the instrumental track, renders scrolling, synchronized lyrics, and potentially visualizes the pitch profile. It features an intelligent Dual-Pane Lyrics Engine (auto-adapting Stacked or Side-by-Side dual-language display).
+* **`DashboardScreen` (`dashboard_screen.dart`)**: The main library view. It displays a list of MediaMonkey songs. It leverages `vox_player_core` for intelligent search filtering.
+* **`AiQueueManagerUi` (inside `vox_player_core`)**: The robust background queue management UI that handles ingestion requests to the Python API server.
+* **`ActiveSessionScreen` (`active_session_screen.dart`)**: The wrapper that passes selected MediaMonkey songs into the `VoxPlayerDashboard` widget from the core library, supplying it with stems, lyrics, and pitch data.
 * **`SettingsScreen` (`settings_screen.dart`)**: Engineered as a non-interrupting Modal Dialog rather than a full page route, ensuring that modifying global app settings (like pitch curve colors) does not tear down active practice sessions or audio/lyric engines.
 ---
 
