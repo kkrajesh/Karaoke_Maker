@@ -2,6 +2,12 @@
 
 Karaoke Maker is an automated pipeline designed to search, download, and process high-fidelity audio tracks to generate clean instrumental and vocal stems. It includes a Python Backend for audio separation/LLM analysis, and a Flutter Practice App frontend.
 
+## 🚀 Release Notes (v1.3.0)
+- Completed Phase 5: Live Pitch Visualizer Engine with advanced Practice Mode and A-B looping.
+- Completed Phase 6: Universal Search Engine decoupled for cross-platform reusability.
+- Completed Phase 8: Data Integration & Decoupling with robust local SQLite mapping.
+- Completed Phase 9: Advanced Performance Sequences with timeline-synchronized Sequence Editor.
+
 ## 🚀 Current State
 - **Stable**: Automated Python pipeline (Demucs extraction, Pitch tracking, LLM lyric scraping/transliteration).
 - **Stable**: Flutter Practice App featuring real-time pitch feedback, interactive segment timelines, and a dual-pane responsive lyrics engine.
