@@ -118,7 +118,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           const Text(
-                            'This will delete existing lyrics and regenerate them. You can paste manual lyrics below or upload a local file. Leave blank to automatically scrape the web.',
+                            'This will regenerate the English translation using your existing native lyrics. To completely replace them, you can paste new lyrics below or upload a local file. If no existing lyrics are found, it will scrape the web.',
                             style: TextStyle(color: VoxProTheme.textSecondary),
                           ),
                           const SizedBox(height: 16),
@@ -410,6 +410,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           });
                         },
                         onReprocess: _showReprocessDialog,
+                        onRemove: () => service.removeFromLibrary(song.id),
                       );
                     },
                   )
@@ -439,6 +440,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   _selectedIndex = 1;
                                 });
                               },
+                              onRemove: () => service.removeFromLibrary(song.id),
+                              onReprocess: _showReprocessDialog,
                             );
                           },
                         );

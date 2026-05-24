@@ -61,6 +61,11 @@ class FileExplorerService extends ChangeNotifier {
     }
   }
 
+  Future<void> removeFromLibrary(String mmId) async {
+    await VoxAiTrackingService.instance.deleteArtifact(mmId);
+    scanDirectory(); // Refresh list after deletion
+  }
+
   void scanDirectory() async {
     isLoading = true;
     notifyListeners();
@@ -69,7 +74,18 @@ class FileExplorerService extends ChangeNotifier {
       final rows = await VoxAiTrackingService.instance.getAllArtifacts();
       final vaultPath = VoxSettingsService.instance.aiVaultPath;
       
-      songs = rows.map((row) => Song.fromAiArtifact(row, vaultPath)).toList();
+      final List<Song> verifiedSongs = [];
+      for (final row in rows) {
+        final String mmId = row['mm_id']?.toString() ?? '';
+        final String title = row['title']?.toString() ?? '';
+        final actualDirPath = VoxAiTrackingService.instance.getArtifactDirectory(mmId, title);
+        
+        final song = Song.fromAiArtifact(row, actualDirPath);
+        song.isMissing = !Directory(song.directoryPath).existsSync();
+        verifiedSongs.add(song);
+      }
+      
+      songs = verifiedSongs;
       currentDirectory = vaultPath; // Just to satisfy UI display
     } catch (e, st) {
       print("Error scanning AI Vault: $e");

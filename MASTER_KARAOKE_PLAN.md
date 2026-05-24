@@ -99,6 +99,19 @@ This project is executed in **Linear Incremental Phases**. Each phase must be ve
     3. Updated `LyricsParser` within the new `vox_player_core` package to use smart `.contains()` logic, allowing it to adapt to prefixed Vault files effortlessly.
     4. Engineered a `migrate_orphans.py` utility that scans SQLite mapping mismatches and flawlessly auto-renames directories and internal files to sync with legacy MediaMonkey data.
 
+## ✅ Phase 9: Advanced Performance Sequences (COMPLETED)
+**Task:** Build a powerful UI to manage A-B loops and AI-generated vocal segments.
+* **Action:**
+    1. Implemented a timeline-synchronized Sequence Editor allowing merging, splitting, adding, deleting, and previewing segments.
+    2. Integrated auto-generation of "Vocal Parts" using intelligent parsing of `vocal_map.json` and heuristics to club close segments.
+    3. Engineered robust timeline scrubbing intelligence in `_onControllerUpdate` to strictly enforce playback within defined segments, pausing exactly at boundaries and preventing out-of-bounds playback.
+    4. Seamlessly synced live editing to the background `SegmentedProgressBar` to provide instant visual feedback of segment bounds.
+
+
+* **General future ideas**
+1.  **Duet Karaoke Generation** ability to use the segments for singer 1/2/3 and use that segment to generate Karaoke files for singer 1 - which will have other vocals and no vocals for singer 1 sections. Similarly for other singers as well
+2. ** Karaoke Video Generation with Image + Audio** using AI Video Generation using StableDiffusion+ffmpeg - incorporating lyrics, graph, singer parts, all customizable per generation.
+
 ---
 
 ## ⚙️ Configuration Specification (.env.example)

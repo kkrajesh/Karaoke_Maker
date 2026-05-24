@@ -275,9 +275,9 @@ class MakerService:
                 
         return True
 
-    def process_specific_song(self, song_id, url=None, local_audio_path=None, lyrics_text=None, lyrics_type="txt"):
+    def process_specific_song(self, song_id, url=None, local_audio_path=None, lyrics_text=None, lyrics_type="txt", target_dir_override=None, skip_audio=False):
         """API workflow: Takes a specific source and lyrics, and processes them."""
-        target_dir = os.path.join(self.hot_zone, song_id)
+        target_dir = target_dir_override if target_dir_override else os.path.join(self.hot_zone, song_id)
         os.makedirs(target_dir, exist_ok=True)
         
         self.log(song_id, f"[INFO] Starting specific processing for {song_id}")
@@ -300,6 +300,11 @@ class MakerService:
             )
         except Exception as e:
             self.log(song_id, f"[WARN] Failed to process lyrics: {e}")
+
+        if skip_audio:
+            self.log(song_id, "[INFO] Audio processing skipped (partial reprocess).")
+            return True
+
         # 2. Acquire Audio
         target_mp3 = os.path.join(target_dir, "original.wav")
         actual_url = "Local File"

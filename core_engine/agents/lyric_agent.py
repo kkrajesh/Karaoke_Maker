@@ -240,25 +240,30 @@ Lyrics:
         is_synced = lyrics_type == "lrc"
         source = "Manual Override"
 
+        # --- EXISTING FILE CHECK ---
+        if not native_lyrics:
+            import glob
+            fallback_files = glob.glob(os.path.join(target_dir, "*lyrics_native.*"))
+            if not fallback_files:
+                all_files = glob.glob(os.path.join(target_dir, "*.lrc")) + glob.glob(os.path.join(target_dir, "*.txt"))
+                fallback_files = [f for f in all_files if "english" not in f and "meaning" not in f]
+                
+            if fallback_files:
+                fallback_path = fallback_files[0]
+                with open(fallback_path, "r", encoding="utf-8") as f:
+                    native_lyrics = f.read()
+                is_synced = fallback_path.endswith(".lrc")
+                source = "Existing File Fallback"
+                self.log(f"[INFO] LyricAgent: Found existing {os.path.basename(fallback_path)}. Skipping web search.")
+
+        # --- WEB SEARCH ---
         if not native_lyrics and query:
             self.log(f"[WAIT] LyricAgent: Searching lyrics for '{query}'...")
             fetched = self.fetch_lyrics(query)
-            native_lyrics = fetched["text"]
-            is_synced = fetched["type"] == "lrc"
-            source = fetched["source"]
-
-        # --- FALLBACK TO EXISTING ---
-        if not native_lyrics:
-            exts = [".lrc", ".txt"]
-            for e in exts:
-                fallback_path = os.path.join(target_dir, f"lyrics_native{e}")
-                if os.path.exists(fallback_path):
-                    with open(fallback_path, "r", encoding="utf-8") as f:
-                        native_lyrics = f.read()
-                    is_synced = (e == ".lrc")
-                    source = "Existing File Fallback"
-                    self.log(f"[INFO] LyricAgent: Search failed. Falling back to existing {os.path.basename(fallback_path)}.")
-                    break
+            if fetched["text"]:
+                native_lyrics = fetched["text"]
+                is_synced = fetched["type"] == "lrc"
+                source = fetched["source"]
 
         if not native_lyrics:
             self.log(f"[INFO] LyricAgent: No lyrics found for '{query}'. Skipping lyrics.")

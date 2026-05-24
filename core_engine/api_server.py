@@ -8,8 +8,9 @@ from dotenv import load_dotenv
 # Add parent dir to sys.path to resolve module imports properly
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Load env before importing services
-load_dotenv()
+# Load env from parent directory before importing services
+env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
+load_dotenv(dotenv_path=env_path)
 
 from core_engine.maker_service import MakerService
 from core_engine.agents.lyric_agent import LyricAgent
@@ -99,28 +100,49 @@ def reprocess_component():
     if not song_id or not component:
         return jsonify({"error": "song_id and component are required"}), 400
 
-    target_dir = os.path.join(os.getenv("AI_HOTZONE", "."), str(song_id))
-    if not os.path.exists(target_dir) and title:
-        from core_engine.maker_service import sanitize_filename
-        legacy_dir = os.path.join(os.getenv("AI_HOTZONE", "."), sanitize_filename(title).replace(" ", "_"))
-        if os.path.exists(legacy_dir):
-            target_dir = legacy_dir
+    target_dir = None
+    hotzone = os.getenv("AI_HOTZONE", ".")
+    vault = os.getenv("AI_VAULT", ".")
+    
+    # Check HotZone then Vault
+    import glob
+    for base_dir in [hotzone, vault]:
+        # Exact match
+        exact_path = os.path.join(base_dir, str(song_id))
+        if os.path.exists(exact_path):
+            target_dir = exact_path
+            break
+            
+        # Prefix match (Phase 8)
+        matches = glob.glob(os.path.join(base_dir, f"{song_id}_*"))
+        if matches and os.path.isdir(matches[0]):
+            target_dir = matches[0]
+            break
+            
+        # Legacy match
+        if title:
+            from core_engine.maker_service import sanitize_filename
+            legacy_dir = os.path.join(base_dir, sanitize_filename(title).replace(" ", "_"))
+            if os.path.exists(legacy_dir):
+                target_dir = legacy_dir
+                break
 
-    if not os.path.exists(target_dir):
-        return jsonify({"error": f"Song directory not found for ID {song_id} or Title {title}"}), 404
+    if not target_dir or not os.path.exists(target_dir):
+        return jsonify({"error": f"Song directory not found for ID {song_id} or Title {title} in HotZone or Vault"}), 404
 
     # Delete files based on component
     import glob
     files_to_delete = []
     if component in ['vocals', 'instrumental']:
-        files_to_delete.extend(["vocals.wav", "instrumental.wav"])
+        files_to_delete.extend(glob.glob(os.path.join(target_dir, "*vocals.wav")))
+        files_to_delete.extend(glob.glob(os.path.join(target_dir, "*instrumental.wav")))
     elif component == 'pitch':
-        files_to_delete.append("pitch_profile.json")
+        files_to_delete.extend(glob.glob(os.path.join(target_dir, "*pitch_profile.json")))
     elif component == 'map':
-        files_to_delete.append("vocal_map.json")
+        files_to_delete.extend(glob.glob(os.path.join(target_dir, "*vocal_map.json")))
     elif component == 'lyrics':
-        files_to_delete.extend(glob.glob(os.path.join(target_dir, "lyrics_english.*")))
-        files_to_delete.extend(glob.glob(os.path.join(target_dir, "lyrics_meaning.*")))
+        files_to_delete.extend(glob.glob(os.path.join(target_dir, "*lyrics_english.*")))
+        files_to_delete.extend(glob.glob(os.path.join(target_dir, "*lyrics_meaning.*")))
 
     for f in files_to_delete:
         path = os.path.join(target_dir, os.path.basename(f))
@@ -135,12 +157,15 @@ def reprocess_component():
 
     def run_task():
         try:
+            skip_audio = component == 'lyrics'
             success = maker.process_specific_song(
                 song_id=song_id,
                 url=None, # It will use existing local original.wav
                 local_audio_path=os.path.join(target_dir, "original.wav"),
                 lyrics_text=lyrics_text,
-                lyrics_type=lyrics_type
+                lyrics_type=lyrics_type,
+                target_dir_override=target_dir,
+                skip_audio=skip_audio
             )
             tasks[task_id] = {"status": "completed" if success else "failed"}
             if success:

@@ -10,6 +10,7 @@ class Song {
   final bool hasEnglishLyrics;
   final bool hasVocalMap;
   final String? mmId; // MediaMonkey ID
+  bool isMissing; // Added to track missing folders
 
   String get id => mmId ?? directoryPath.split(Platform.pathSeparator).last;
 
@@ -23,6 +24,7 @@ class Song {
     this.hasEnglishLyrics = false,
     this.hasVocalMap = false,
     this.mmId,
+    this.isMissing = false,
   });
 
   factory Song.fromDirectory(Directory dir) {
