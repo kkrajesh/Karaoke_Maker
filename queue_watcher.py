@@ -11,9 +11,9 @@ def main():
     print("=======================================")
 
     load_dotenv()
-    hot_zone = os.getenv("ONEDRIVE_HOT_ZONE")
+    hot_zone = os.getenv("AI_HOTZONE")
     if not hot_zone:
-        print("[ERROR] ONEDRIVE_HOT_ZONE not set in .env")
+        print("[ERROR] AI_HOTZONE not set in .env")
         return
 
     queue_file = os.path.join(hot_zone, "ai_queue.json")
@@ -56,9 +56,13 @@ def main():
             print(f"\n[QUEUE] Starting task: {task.get('title')} - {task.get('artist')}")
             
             # Generate a safe folder name (song_id) for the processing directory
-            safe_title = sanitize_filename(task.get("title", "Unknown_Title"))
-            safe_artist = sanitize_filename(task.get("artist", "Unknown_Artist"))
-            song_id = f"{safe_title} - {safe_artist}"
+            task_id = str(task.get("id", ""))
+            if task_id:
+                song_id = sanitize_filename(task_id)
+            else:
+                safe_title = sanitize_filename(task.get("title", "Unknown_Title"))
+                safe_artist = sanitize_filename(task.get("artist", "Unknown_Artist"))
+                song_id = f"{safe_title} - {safe_artist}"
 
             # Run Maker Service
             try:

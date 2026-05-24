@@ -7,9 +7,9 @@ import 'ui/screens/dashboard_screen.dart';
 import 'package:vox_player_core/vox_player_core.dart';
 import 'services/settings_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  VoxPlayerCore.ensureInitialized();
+  await VoxPlayerCore.ensureInitialized();
   runApp(
     MultiProvider(
       providers: [

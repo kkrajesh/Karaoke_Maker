@@ -33,32 +33,38 @@ class LyricsParser {
     LyricsData? englishData;
     String? meaningText;
 
+    final dir = Directory(directoryPath);
+    if (!await dir.exists()) return SongLyrics();
+
+    List<File> files = [];
+    await for (final entity in dir.list()) {
+      if (entity is File) files.add(entity);
+    }
+
     // Load Native
-    File nativeLrc = File("$directoryPath${Platform.pathSeparator}lyrics_native.lrc");
-    if (await nativeLrc.exists()) {
-      nativeData = _parseLrc(await nativeLrc.readAsString());
-    } else {
-      File nativeTxt = File("$directoryPath${Platform.pathSeparator}lyrics_native.txt");
-      if (await nativeTxt.exists()) {
-        nativeData = _parseUnsynced(await nativeTxt.readAsString());
+    File? nativeFile = files.where((f) => f.path.contains('lyrics_native') || f.path.endsWith('.lrc') && !f.path.contains('english')).firstOrNull;
+    if (nativeFile != null) {
+      if (nativeFile.path.endsWith('.lrc')) {
+        nativeData = _parseLrc(await nativeFile.readAsString());
+      } else {
+        nativeData = _parseUnsynced(await nativeFile.readAsString());
       }
     }
 
     // Load English
-    File englishLrc = File("$directoryPath${Platform.pathSeparator}lyrics_english.lrc");
-    if (await englishLrc.exists()) {
-      englishData = _parseLrc(await englishLrc.readAsString());
-    } else {
-      File englishTxt = File("$directoryPath${Platform.pathSeparator}lyrics_english.txt");
-      if (await englishTxt.exists()) {
-        englishData = _parseUnsynced(await englishTxt.readAsString());
+    File? englishFile = files.where((f) => f.path.contains('lyrics_english')).firstOrNull;
+    if (englishFile != null) {
+      if (englishFile.path.endsWith('.lrc')) {
+        englishData = _parseLrc(await englishFile.readAsString());
+      } else {
+        englishData = _parseUnsynced(await englishFile.readAsString());
       }
     }
 
     // Load Meaning
-    File meaningTxt = File("$directoryPath${Platform.pathSeparator}lyrics_meaning.txt");
-    if (await meaningTxt.exists()) {
-      meaningText = await meaningTxt.readAsString();
+    File? meaningFile = files.where((f) => f.path.contains('lyrics_meaning.txt')).firstOrNull;
+    if (meaningFile != null) {
+      meaningText = await meaningFile.readAsString();
     }
 
     // Cross-pollinate sync and singer data if line counts match

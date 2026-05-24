@@ -91,6 +91,14 @@ This project is executed in **Linear Incremental Phases**. Each phase must be ve
     2. Add a "Practice Mode" toggle in the Singer Dashboard that pulls these AI assets.
     3. Inject host-specific implementation of `VoxSearchProvider` into the `UnifiedSearchUI`.
 
+## ✅ Phase 8: Data Integration & Decoupling (COMPLETED)
+**Task:** Ensure reliable cross-platform data synchronization.
+* **Action:** 
+    1. Built `VoxAiTrackingService` powered by `sqflite_common_ffi` to maintain a robust local SQLite mapping between MediaMonkey DB IDs and AI Vault folders.
+    2. Refactored `queue_watcher.py` to seamlessly pass MediaMonkey IDs end-to-end, solving folder-naming drift and data dissociation.
+    3. Updated `LyricsParser` within the new `vox_player_core` package to use smart `.contains()` logic, allowing it to adapt to prefixed Vault files effortlessly.
+    4. Engineered a `migrate_orphans.py` utility that scans SQLite mapping mismatches and flawlessly auto-renames directories and internal files to sync with legacy MediaMonkey data.
+
 ---
 
 ## ⚙️ Configuration Specification (.env.example)

@@ -30,18 +30,24 @@ def verify_ffmpeg():
         print(f"[ERROR] FFmpeg NOT found at: {ffmpeg_path}")
         return False
 
-def verify_onedrive():
-    onedrive_path = os.getenv("ONEDRIVE_HOT_ZONE")
-    if not onedrive_path:
-        print("[ERROR] ONEDRIVE_HOT_ZONE is not set in the environment.")
+def verify_hotzone():
+    hotzone_path = os.getenv("AI_HOTZONE")
+    if not hotzone_path:
+        print("[ERROR] AI_HOTZONE is not set in the environment.")
         return False
     
-    if os.path.exists(onedrive_path):
-        print(f"[OK] OneDrive Hot Zone found at: {onedrive_path}")
+    if os.path.exists(hotzone_path):
+        print(f"[OK] AI Hot Zone found at: {hotzone_path}")
         return True
     else:
-        print(f"[ERROR] OneDrive Hot Zone NOT found at: {onedrive_path}")
-        return False
+        # Auto-create if not exists
+        try:
+            os.makedirs(hotzone_path, exist_ok=True)
+            print(f"[OK] AI Hot Zone created at: {hotzone_path}")
+            return True
+        except Exception as e:
+            print(f"[ERROR] Failed to create AI Hot Zone at: {hotzone_path}. Error: {e}")
+            return False
 
 def get_preferred_domains():
     domains_str = os.getenv("PREFERRED_AUDIO_DOMAINS", "")
@@ -92,14 +98,14 @@ if __name__ == "__main__":
     print("=====================================\n")
     
     ffmpeg_ok = verify_ffmpeg()
-    onedrive_ok = verify_onedrive()
+    hotzone_ok = verify_hotzone()
     preferred_domains = get_preferred_domains()
     
     print("-" * 37)
     llm_ok = verify_llm_connectivity()
     
     print("\n=====================================")
-    if ffmpeg_ok and llm_ok and onedrive_ok:
+    if ffmpeg_ok and llm_ok and hotzone_ok:
         print("[DONE] Phase 0 Verification Complete. All systems go!")
     else:
         print("[!] Phase 0 Verification Completed with issues. Please update your .env file.")

@@ -76,6 +76,8 @@ def process_song():
                 lyrics_type=lyrics_type
             )
             tasks[task_id] = {"status": "completed" if success else "failed"}
+            if success:
+                print(f"[OK] Processing completely finished for {song_id}")
         except Exception as e:
             print(f"Task error: {e}")
             tasks[task_id] = {"status": "failed", "error": str(e)}
@@ -89,6 +91,7 @@ def process_song():
 def reprocess_component():
     data = request.json
     song_id = data.get('song_id')
+    title = data.get('title')
     component = data.get('component') # 'vocals', 'instrumental', 'pitch', 'map', 'lyrics'
     lyrics_text = data.get('lyrics_text')
     lyrics_type = data.get('lyrics_type', 'txt')
@@ -96,9 +99,15 @@ def reprocess_component():
     if not song_id or not component:
         return jsonify({"error": "song_id and component are required"}), 400
 
-    target_dir = os.path.join(os.getenv("ONEDRIVE_HOT_ZONE", "."), song_id)
+    target_dir = os.path.join(os.getenv("AI_HOTZONE", "."), str(song_id))
+    if not os.path.exists(target_dir) and title:
+        from core_engine.maker_service import sanitize_filename
+        legacy_dir = os.path.join(os.getenv("AI_HOTZONE", "."), sanitize_filename(title).replace(" ", "_"))
+        if os.path.exists(legacy_dir):
+            target_dir = legacy_dir
+
     if not os.path.exists(target_dir):
-        return jsonify({"error": "Song directory not found"}), 404
+        return jsonify({"error": f"Song directory not found for ID {song_id} or Title {title}"}), 404
 
     # Delete files based on component
     import glob
@@ -134,6 +143,8 @@ def reprocess_component():
                 lyrics_type=lyrics_type
             )
             tasks[task_id] = {"status": "completed" if success else "failed"}
+            if success:
+                print(f"[OK] Processing completely finished for {song_id}")
         except Exception as e:
             print(f"Task error: {e}")
             tasks[task_id] = {"status": "failed", "error": str(e)}

@@ -12,7 +12,8 @@ Karaoke Maker is the engine of the Karaoke Ecosystem. It consists of a robust Py
   - **Modal Settings**: A non-interrupting overlay architecture allowing live config changes without tearing down the audio player state.
 
 ## Current Migration Phase
-We are currently in **Phase 1** of a massive architectural refactoring. The player components inside `practice_app` are being extracted into a standalone package called `vox_player_core` so they can be shared universally with `karaoke_app`.
+We have **Completed Phase 8** of a massive architectural refactoring. The player components inside `practice_app` have been successfully extracted into a standalone package called `vox_player_core`. 
+Additionally, the system now uses a robust local SQLite database (`vox_ai_metadata.db`) mapping to the MediaMonkey `MM.DB` to handle all artifact tracking, eliminating brittle folder-name parsing.
 
 ## Ecosystem Role
-Karaoke Maker acts as the "Preparer" and "Practicer". Once it prepares a song (stems, lyrics, pitch), that song is marked as 'Ready' in the global Google Sheets catalog for the Host App to use.
+Karaoke Maker acts as the "Preparer" and "Practicer". Once it prepares a song (stems, lyrics, pitch), that song is tracked locally via `vox_ai_db.dart` and marked as 'Ready' for the Host App to use via global sync.

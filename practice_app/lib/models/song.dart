@@ -9,8 +9,9 @@ class Song {
   final bool hasNativeLyrics;
   final bool hasEnglishLyrics;
   final bool hasVocalMap;
+  final String? mmId; // MediaMonkey ID
 
-  String get id => directoryPath.split(Platform.pathSeparator).last;
+  String get id => mmId ?? directoryPath.split(Platform.pathSeparator).last;
 
   Song({
     required this.title,
@@ -21,6 +22,7 @@ class Song {
     this.hasNativeLyrics = false,
     this.hasEnglishLyrics = false,
     this.hasVocalMap = false,
+    this.mmId,
   });
 
   factory Song.fromDirectory(Directory dir) {
@@ -30,12 +32,30 @@ class Song {
     return Song(
       title: title,
       directoryPath: dir.path,
-      hasInstrumental: files.contains('instrumental.wav'),
-      hasVocals: files.contains('vocals.wav'),
-      hasPitchProfile: files.contains('pitch_profile.json'),
-      hasNativeLyrics: files.contains('lyrics_native.lrc') || files.contains('lyrics_native.txt'),
-      hasEnglishLyrics: files.contains('lyrics_english.lrc') || files.contains('lyrics_english.txt'),
-      hasVocalMap: files.contains('vocal_map.json'),
+      hasInstrumental: files.any((f) => f.contains('instrumental.wav')),
+      hasVocals: files.any((f) => f.contains('vocals.wav')),
+      hasPitchProfile: files.any((f) => f.contains('pitch_profile.json')),
+      hasNativeLyrics: files.any((f) => f.contains('lyrics_native.lrc') || f.contains('lyrics_native.txt')),
+      hasEnglishLyrics: files.any((f) => f.contains('lyrics_english.lrc') || f.contains('lyrics_english.txt')),
+      hasVocalMap: files.any((f) => f.contains('vocal_map.json')),
+    );
+  }
+
+  factory Song.fromAiArtifact(Map<String, dynamic> row, String aiVaultPath) {
+    final String mmId = row['mm_id']?.toString() ?? '';
+    final String title = row['title']?.toString() ?? 'Unknown Title';
+    
+    // In the new system, we just map everything logically.
+    return Song(
+      title: title,
+      directoryPath: aiVaultPath, // Just a placeholder, as the actual paths will be derived using mmId and title
+      mmId: mmId,
+      hasInstrumental: row['has_instrumental'] == 1,
+      hasVocals: row['has_vocals'] == 1,
+      hasPitchProfile: row['has_pitch_data'] == 1,
+      hasNativeLyrics: row['has_lyrics'] == 1,
+      hasEnglishLyrics: false, // For now, track single lyrics
+      hasVocalMap: row['has_vocal_map'] == 1,
     );
   }
 }

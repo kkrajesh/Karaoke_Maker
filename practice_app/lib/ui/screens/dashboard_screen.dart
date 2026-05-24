@@ -2,12 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
-import '../../services/api_service.dart';
 import '../../services/file_explorer_service.dart';
 import '../theme/voxpro_theme.dart';
 import '../../models/song.dart';
 import 'active_session_screen.dart';
-import 'create_song_screen.dart';
 import 'settings_screen.dart';
 import '../widgets/song_card.dart';
 import '../widgets/song_list_tile.dart';
@@ -174,13 +172,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Navigator.pop(context);
                     try {
                       final service = Provider.of<FileExplorerService>(context, listen: false);
-                      final taskId = await ApiService.reprocessComponent(
+                      final songTitle = service.songs.firstWhere((s) => s.id == songId).title;
+                      final taskId = await VoxApiService.reprocessComponent(
                         songId: songId,
+                        title: songTitle,
                         component: component,
                         lyricsText: component == 'lyrics' && lyricsController.text.isNotEmpty ? lyricsController.text : null,
                       );
                       if (context.mounted) {
-                        service.trackTask(taskId, songId, ScaffoldMessenger.of(context));
+                        service.trackTask(taskId, songId, songTitle, ScaffoldMessenger.of(context));
                       }
                     } catch (e) {
                       if (context.mounted) {
@@ -216,7 +216,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: UnifiedSearchUI(
               providers: [
                 YoutubeSearchProvider(),
-                LocalDirectorySearchProvider(baseDirectoryPath: localPath),
+                MediaMonkeySearchProvider(),
               ],
               actionBuilder: (context, result) {
                 return Row(
@@ -481,8 +481,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
     _wasWide = isWide;
     
-    return Scaffold(
-      appBar: AppBar(
+    return AiQueueNotificationListener(
+      child: Scaffold(
+        appBar: AppBar(
         backgroundColor: VoxProTheme.sidebar,
         elevation: 0,
         leading: IconButton(
@@ -500,20 +501,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         title: const Text(
           'KARAOKE MAKER',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 2,
-            color: VoxProTheme.accent,
-          ),
+          style: TextStyle(letterSpacing: 2, fontWeight: FontWeight.bold, color: VoxProTheme.textPrimary),
         ),
         actions: [
           IconButton(
             icon: const Icon(Icons.search),
-            color: VoxProTheme.textSecondary,
-            tooltip: 'Unified Search',
             onPressed: _showUnifiedSearch,
+            tooltip: 'Global Search',
           ),
+          const AiQueueStatusIcon(),
           const SizedBox(width: 16),
         ],
       ),
@@ -559,6 +555,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text("Create Song", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
       )) : null,
-    );
+    ));
   }
 }

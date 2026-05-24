@@ -75,10 +75,44 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
     }
 
     // Local file handling
-    final String path = "${song.directoryPath}${Platform.pathSeparator}instrumental.wav";
-    final File instFile = File(path);
+    // Local file handling
+    String instPath;
+    String pitchPath;
+    String mapPath;
+    String lyricsDir;
+    String vocalsPath;
+
+    if (song.mmId != null && song.mmId!.isNotEmpty) {
+      final aiService = VoxAiTrackingService.instance;
+      instPath = aiService.getInstrumentalPath(song.mmId!, song.title);
+      pitchPath = aiService.getPitchDataPath(song.mmId!, song.title);
+      mapPath = aiService.getVocalMapPath(song.mmId!, song.title);
+      lyricsDir = aiService.getArtifactDirectory(song.mmId!, song.title);
+      vocalsPath = aiService.getVocalsPath(song.mmId!, song.title);
+    } else {
+      lyricsDir = song.directoryPath;
+      instPath = "${song.directoryPath}${Platform.pathSeparator}instrumental.wav";
+      pitchPath = "${song.directoryPath}${Platform.pathSeparator}pitch_profile.json";
+      mapPath = "${song.directoryPath}${Platform.pathSeparator}vocal_map.json";
+      vocalsPath = "${song.directoryPath}${Platform.pathSeparator}vocals.wav";
+      
+      final dir = Directory(song.directoryPath);
+      if (await dir.exists()) {
+        await for (final entity in dir.list()) {
+          if (entity is File) {
+            final fPath = entity.path;
+            if (fPath.contains('instrumental.wav')) instPath = fPath;
+            if (fPath.contains('pitch_profile.json')) pitchPath = fPath;
+            if (fPath.contains('vocal_map.json')) mapPath = fPath;
+            if (fPath.contains('vocals.wav')) vocalsPath = fPath;
+          }
+        }
+      }
+    }
+
+    final File instFile = File(instPath);
     if (await instFile.exists()) {
-      _mediaSource = VoxMediaSource(url: path);
+      _mediaSource = VoxMediaSource(url: instPath);
     } else {
        if (FileSystemEntity.isFileSync(song.directoryPath)) {
           _mediaSource = VoxMediaSource(url: song.directoryPath);
@@ -89,8 +123,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
 
     // Load pitch profile
     if (song.hasPitchProfile) {
-      final jsonPath = "${song.directoryPath}${Platform.pathSeparator}pitch_profile.json";
-      final file = File(jsonPath);
+      final file = File(pitchPath);
       if (await file.exists()) {
         final content = await file.readAsString();
         final data = jsonDecode(content);
@@ -105,7 +138,6 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
 
     // Load vocal map
     if (song.hasVocalMap) {
-      final mapPath = "${song.directoryPath}${Platform.pathSeparator}vocal_map.json";
       final file = File(mapPath);
       if (await file.exists()) {
         final content = await file.readAsString();
@@ -116,11 +148,11 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
     
     // Load lyrics
     if (song.hasNativeLyrics || song.hasEnglishLyrics) {
-      _songLyrics = await LyricsParser.parse(song.directoryPath);
+      _songLyrics = await LyricsParser.parse(lyricsDir);
     }
     
     // Load Performance Profile
-    _performanceProfile = await PerformanceProfileService.loadProfile(song.directoryPath);
+    _performanceProfile = await PerformanceProfileService.loadProfile(lyricsDir);
 
     if (mounted) {
       setState(() {
@@ -212,11 +244,13 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
             lyrics: _songLyrics,
             pitchData: _targetPitchData,
             vocalMapData: _vocalMapData,
-            directoryPath: widget.selectedSong!.directoryPath,
+            directoryPath: (widget.selectedSong!.mmId != null && widget.selectedSong!.mmId!.isNotEmpty) ? VoxAiTrackingService.instance.getArtifactDirectory(widget.selectedSong!.mmId!, widget.selectedSong!.title) : widget.selectedSong!.directoryPath,
+            vocalsPath: (widget.selectedSong!.mmId != null && widget.selectedSong!.mmId!.isNotEmpty) ? VoxAiTrackingService.instance.getVocalsPath(widget.selectedSong!.mmId!, widget.selectedSong!.title) : "${widget.selectedSong!.directoryPath}${Platform.pathSeparator}vocals.wav",
             performanceProfile: _performanceProfile,
             onProfileSaved: (profile) {
               if (widget.selectedSong != null) {
-                PerformanceProfileService.saveProfile(widget.selectedSong!.directoryPath, profile);
+                final saveDir = (widget.selectedSong!.mmId != null && widget.selectedSong!.mmId!.isNotEmpty) ? VoxAiTrackingService.instance.getArtifactDirectory(widget.selectedSong!.mmId!, widget.selectedSong!.title) : widget.selectedSong!.directoryPath;
+                PerformanceProfileService.saveProfile(saveDir, profile);
               }
             },
             config: VoxDashboardConfig.practiceMode(),

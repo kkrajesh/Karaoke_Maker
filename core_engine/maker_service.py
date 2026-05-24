@@ -21,11 +21,11 @@ def sanitize_filename(name):
 class MakerService:
     def __init__(self):
         self.domains = get_preferred_domains()
-        self.hot_zone = os.getenv("ONEDRIVE_HOT_ZONE")
+        self.hot_zone = os.getenv("AI_HOTZONE")
         self.ffmpeg_path = os.getenv("FFMPEG_PATH")
         
         if not self.hot_zone:
-            raise ValueError("ONEDRIVE_HOT_ZONE is not configured.")
+            raise ValueError("AI_HOTZONE is not configured.")
 
     def log(self, song_id, message):
         """Prints a message and logs it to a local debug.log file in the song's directory."""
