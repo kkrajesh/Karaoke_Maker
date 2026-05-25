@@ -516,8 +516,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(width: 16),
         ],
       ),
-      body: Row(
-        children: [
+      body: SafeArea(
+        child: Row(
+          children: [
           AnimatedSize(
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeInOut,
@@ -537,7 +538,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 : _buildLibraryView(service),
           ),
         ],
-      ),
+      )),
       floatingActionButton: _selectedIndex == 0 ? (screenWidth < 600 ? FloatingActionButton(
         onPressed: () {
           Navigator.push(

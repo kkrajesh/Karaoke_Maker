@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:vox_player_core/vox_player_core.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../services/settings_service.dart';
 import '../theme/voxpro_theme.dart';
 import 'admin_ingestion_dialog.dart';
@@ -28,6 +29,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late TextEditingController _vaultController;
   late TextEditingController _hotZoneController;
   late TextEditingController _dbController;
+  late TextEditingController _winRootController;
+  late TextEditingController _andRootController;
+  late double _micLatency;
 
   @override
   void initState() {
@@ -35,6 +39,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _vaultController = TextEditingController(text: VoxSettingsService.instance.aiVaultPath);
     _hotZoneController = TextEditingController(text: VoxSettingsService.instance.aiHotZonePath);
     _dbController = TextEditingController(text: VoxSettingsService.instance.mediaMonkeyDbPath);
+    _winRootController = TextEditingController(text: VoxSettingsService.instance.windowsMusicRoot);
+    _andRootController = TextEditingController(text: VoxSettingsService.instance.androidMusicRoot);
+    _micLatency = VoxSettingsService.instance.micLatencyOffset.toDouble();
+    
+    // In case we opened this screen very fast, wait for settings to finish loading then update UI
+    VoxSettingsService.instance.initFuture.then((_) {
+      if (mounted) {
+        setState(() {
+          _vaultController.text = VoxSettingsService.instance.aiVaultPath;
+          _hotZoneController.text = VoxSettingsService.instance.aiHotZonePath;
+          _dbController.text = VoxSettingsService.instance.mediaMonkeyDbPath;
+          _winRootController.text = VoxSettingsService.instance.windowsMusicRoot;
+          _andRootController.text = VoxSettingsService.instance.androidMusicRoot;
+          _micLatency = VoxSettingsService.instance.micLatencyOffset.toDouble();
+        });
+      }
+    });
   }
 
   @override
@@ -42,6 +63,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _vaultController.dispose();
     _hotZoneController.dispose();
     _dbController.dispose();
+    _winRootController.dispose();
+    _andRootController.dispose();
     super.dispose();
   }
 
@@ -61,9 +84,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await VoxSettingsService.instance.setAiVaultPath(newVault);
     await VoxSettingsService.instance.setAiHotZonePath(newHotZone);
     await VoxSettingsService.instance.setMediaMonkeyDbPath(_dbController.text);
+    await VoxSettingsService.instance.setWindowsMusicRoot(_winRootController.text);
+    await VoxSettingsService.instance.setAndroidMusicRoot(_andRootController.text);
+    await VoxSettingsService.instance.setMicLatencyOffset(_micLatency.toInt());
     
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Paths saved successfully.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Settings saved successfully.')));
     }
   }
 
@@ -155,9 +181,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: AlertDialog(
         backgroundColor: VoxProTheme.cardBg,
         title: const Text('Settings'),
-        content: SizedBox(
-          width: 500,
-          height: 400, // Fixed height to prevent overflow
+        content: Container(
+          width: MediaQuery.of(context).size.width * 0.9,
+          constraints: BoxConstraints(
+            maxWidth: 600,
+            maxHeight: MediaQuery.of(context).size.height * 0.8,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -175,7 +204,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Expanded(
                 child: TabBarView(
                   children: [
-                    // Tab 1: Colors
+                    // Tab 1: Colors & Audio
                     SingleChildScrollView(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -194,6 +223,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             currentColor: settings.userPitchColor,
                             onColorSelected: settings.setUserPitchColor,
                           ),
+                          const SizedBox(height: 24),
+                          const Text('Mic Latency Offset (ms)', style: TextStyle(color: VoxProTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
+                          Slider(
+                            value: _micLatency,
+                            min: -500,
+                            max: 500,
+                            divisions: 100,
+                            label: '${_micLatency.toInt()} ms',
+                            activeColor: VoxProTheme.accent,
+                            onChanged: (val) {
+                              setState(() {
+                                _micLatency = val;
+                              });
+                            },
+                          ),
                         ],
                       ),
                     ),
@@ -203,39 +247,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const SizedBox(height: 8),
-                          const Text('AI Vault Directory', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                          const SizedBox(height: 8),
-                          _buildPathSelector(
-                            controller: _vaultController,
-                            onPathSelected: (p) => _vaultController.text = p,
-                            isDirectory: true,
-                          ),
-                          const SizedBox(height: 16),
-                          const Text('AI HotZone Directory (Processing Area)', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                          const SizedBox(height: 8),
-                          _buildPathSelector(
-                            controller: _hotZoneController,
-                            onPathSelected: (p) => _hotZoneController.text = p,
-                            isDirectory: true,
-                          ),
-                          const SizedBox(height: 16),
                           const Text('MediaMonkey Database (MM.DB)', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 4),
                           _buildPathSelector(
                             controller: _dbController,
                             onPathSelected: (p) => _dbController.text = p,
                             isDirectory: false,
                             allowedExtensions: ['db', 'DB'],
                           ),
+                          const SizedBox(height: 16),
+                          const Text('Windows Music Root', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                          const SizedBox(height: 4),
+                          _buildPathSelector(
+                            controller: _winRootController,
+                            onPathSelected: (p) => _winRootController.text = p,
+                            isDirectory: true,
+                          ),
+                          const SizedBox(height: 16),
+                          const Text('Android Music Root', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                          const SizedBox(height: 4),
+                          _buildPathSelector(
+                            controller: _andRootController,
+                            onPathSelected: (p) => _andRootController.text = p,
+                            isDirectory: true,
+                          ),
+                          const SizedBox(height: 16),
+                          const Text('AI Vault Directory', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                          const SizedBox(height: 4),
+                          _buildPathSelector(
+                            controller: _vaultController,
+                            onPathSelected: (p) => _vaultController.text = p,
+                            isDirectory: true,
+                          ),
+                          const SizedBox(height: 16),
+                          const Text('AI HotZone Directory', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                          const SizedBox(height: 4),
+                          _buildPathSelector(
+                            controller: _hotZoneController,
+                            onPathSelected: (p) => _hotZoneController.text = p,
+                            isDirectory: true,
+                          ),
                           const SizedBox(height: 24),
                           Center(
                             child: ElevatedButton.icon(
                               icon: const Icon(Icons.save),
-                              label: const Text('Save Paths & Check Moves'),
+                              label: const Text('Save Settings'),
                               style: ElevatedButton.styleFrom(backgroundColor: VoxProTheme.accent, foregroundColor: Colors.black),
                               onPressed: _savePaths,
                             ),
                           ),
+                          const SizedBox(height: 16),
                         ],
                       ),
                     ),
@@ -247,6 +308,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           const SizedBox(height: 8),
                           Text('Maintenance Tools', style: Theme.of(context).textTheme.titleMedium?.copyWith(color: VoxProTheme.textPrimary)),
                           const SizedBox(height: 16),
+                          if (Platform.isAndroid) ...[
+                            ElevatedButton.icon(
+                              icon: const Icon(Icons.security),
+                              label: const Text('Request Android Permissions'),
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[800]),
+                              onPressed: () async {
+                                await [
+                                  Permission.microphone,
+                                  Permission.storage,
+                                  Permission.manageExternalStorage,
+                                ].request();
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Permissions requested')));
+                                }
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                          ],
                           ElevatedButton.icon(
                             icon: const Icon(Icons.download),
                             label: const Text('Force Ingest HotZone'),

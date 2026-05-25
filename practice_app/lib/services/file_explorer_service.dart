@@ -12,7 +12,9 @@ class FileExplorerService extends ChangeNotifier {
   Map<String, String> activeTasks = {}; // taskId -> song name
 
   FileExplorerService() {
-    scanDirectory();
+    VoxSettingsService.instance.initFuture.then((_) {
+      scanDirectory();
+    });
   }
 
   void trackTask(String taskId, String songId, String title, ScaffoldMessengerState messenger) async {
