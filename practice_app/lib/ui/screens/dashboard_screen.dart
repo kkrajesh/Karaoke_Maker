@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../services/file_explorer_service.dart';
 import '../theme/voxpro_theme.dart';
 import '../../models/song.dart';
@@ -32,6 +33,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool? _filterPitch;
   bool? _filterMap;
   bool? _filterLyrics;
+
+  @override
+  void initState() {
+    super.initState();
+    _requestAndroidPermissions();
+  }
+
+  Future<void> _requestAndroidPermissions() async {
+    if (Platform.isAndroid) {
+      if (!await Permission.manageExternalStorage.isGranted) {
+        await Permission.manageExternalStorage.request();
+      }
+      if (!await Permission.storage.isGranted) {
+        await Permission.storage.request();
+      }
+      if (!await Permission.microphone.isGranted) {
+        await Permission.microphone.request();
+      }
+      
+      // Attempt a rescan now that we have permissions
+      if (mounted) {
+        final service = Provider.of<FileExplorerService>(context, listen: false);
+        service.scanDirectory();
+      }
+    }
+  }
 
   bool? _nextFilterState(bool? current) {
     if (current == null) return true;
