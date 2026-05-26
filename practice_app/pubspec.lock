@@ -1019,7 +1019,7 @@ packages:
       path: "../../vox_player_core"
       relative: true
     source: path
-    version: "0.1.1"
+    version: "0.1.2"
   wakelock_plus:
     dependency: transitive
     description:

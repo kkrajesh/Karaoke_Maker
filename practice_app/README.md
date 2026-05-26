@@ -5,6 +5,10 @@ VoxPro (the `practice_app`) is the frontend Flutter desktop application for the 
 > [!NOTE]
 > As of **Phase 5**, the core UI, audio playback, pitch tracking, and lyrics parsing have been modularized and moved into the shared `vox_player_core` package. The `practice_app` now acts as a thin client shell that mounts the `VoxPlayerDashboard` and `UnifiedSearchUI`.
 
+## 🚀 Release Notes (v1.4.0)
+- Advanced Performance Sequences (Phase 9) integrated.
+- Timeline-synchronized Sequence Editor for segments and A-B loop tracking.
+
 ## 🚀 Features
 
 - **Automated Library Scanning**: Uses `file_picker` and `MMDB` (MediaMonkey) via `vox_player_core` to instantly scan your `ONEDRIVE_HOT_ZONE`. (Transitioning from `es.exe` in Phase 9).
