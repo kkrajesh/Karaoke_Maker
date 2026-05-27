@@ -179,6 +179,55 @@ def reprocess_component():
     
     return jsonify({"message": f"Reprocessing {component} started", "task_id": task_id})
 
+@app.route('/generate-practice-mp3', methods=['POST'])
+def generate_practice_mp3():
+    data = request.json
+    song_id = data.get('song_id')
+    
+    if not song_id:
+        return jsonify({"error": "song_id is required"}), 400
+
+    target_dir = None
+    hotzone = os.getenv("AI_HOTZONE", ".")
+    vault = os.getenv("AI_VAULT", ".")
+    
+    import glob
+    for base_dir in [hotzone, vault]:
+        exact_path = os.path.join(base_dir, str(song_id))
+        if os.path.exists(exact_path):
+            target_dir = exact_path
+            break
+        matches = glob.glob(os.path.join(base_dir, f"{song_id}_*"))
+        if matches and os.path.isdir(matches[0]):
+            target_dir = matches[0]
+            break
+
+    if not target_dir or not os.path.exists(target_dir):
+        return jsonify({"error": f"Song directory not found for ID {song_id}"}), 404
+
+    task_id = f"{song_id}_gen_mp3"
+    tasks[task_id] = {"status": "processing"}
+
+    def run_task():
+        try:
+            from core_engine.mp3_generator import PracticeMp3Generator
+            generator = PracticeMp3Generator(target_dir, ffmpeg_path=os.getenv("FFMPEG_PATH", "ffmpeg"))
+            success, msg = generator.generate_all()
+            tasks[task_id] = {"status": "completed" if success else "failed", "message": msg}
+            if success:
+                print(f"[OK] MP3 Generation finished for {song_id}: {msg}")
+            else:
+                print(f"[ERROR] MP3 Generation failed for {song_id}: {msg}")
+        except Exception as e:
+            print(f"Task error: {e}")
+            tasks[task_id] = {"status": "failed", "error": str(e)}
+
+    thread = threading.Thread(target=run_task)
+    thread.start()
+    
+    return jsonify({"message": "MP3 generation started", "task_id": task_id})
+
+
 @app.route('/status/<task_id>', methods=['GET'])
 def get_status(task_id):
     task = tasks.get(task_id)

@@ -5,7 +5,8 @@ VoxPro (the `practice_app`) is the frontend Flutter desktop application for the 
 > [!NOTE]
 > As of **Phase 5**, the core UI, audio playback, pitch tracking, and lyrics parsing have been modularized and moved into the shared `vox_player_core` package. The `practice_app` now acts as a thin client shell that mounts the `VoxPlayerDashboard` and `UnifiedSearchUI`.
 
-## 🚀 Release Notes (v1.4.0)
+## 🚀 Release Notes (v1.5.0)
+- Fully supported Background Audio Playback on Android devices via `vox_player_core`.
 - Advanced Performance Sequences (Phase 9) integrated.
 - Timeline-synchronized Sequence Editor for segments and A-B loop tracking.
 
@@ -56,6 +57,30 @@ To launch the practice dashboard on Windows:
 cd practice_app
 flutter run -d windows
 ```
+
+### 📱 Testing on Android via Wireless Debugging (Android 11+)
+If you want to test on an Android tablet wirelessly without a USB cable:
+1. Ensure your tablet and PC are on the same Wi-Fi network.
+2. Enable **Wireless debugging** in the tablet's Developer Options.
+3. Tap **Wireless debugging** -> **Pair device with pairing code**. Note the IP, Port, and 6-digit code.
+4. On your PC, open a terminal and run:
+   ```bash
+   adb pair <IP>:<PORT>
+   ```
+   *(Enter the 6-digit code when prompted).*
+5. Back on the main Wireless debugging screen, note the *new* port under "IP address & Port".
+6. Connect via ADB:
+   ```bash
+   adb connect <IP>:<NEW_PORT>
+   ```
+7. Verify the device is connected:
+   ```bash
+   flutter devices
+   ```
+8. Run the app:
+   ```bash
+   flutter run
+   ```
 
 ### Usage Workflow
 1. Launch the app.

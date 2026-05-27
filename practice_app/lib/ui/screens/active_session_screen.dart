@@ -8,6 +8,7 @@ import 'package:vox_player_core/vox_player_core.dart';
 import '../../services/settings_service.dart';
 import 'package:provider/provider.dart';
 import '../../services/file_explorer_service.dart';
+import 'package:vox_player_core/src/api/vox_api_service.dart';
 
 class ActiveSessionScreen extends StatefulWidget {
   final Song? selectedSong;
@@ -229,7 +230,41 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                         url: widget.selectedSong!.directoryPath,
                         sourceType: widget.selectedSong!.directoryPath.startsWith('http') ? 'youtube' : 'LocalDirectory',
                       );
-                      return AiQueueButton(result: result, isVisible: true);
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ElevatedButton.icon(
+                            icon: const Icon(Icons.music_note, size: 16),
+                            label: const Text('Gen MP3s'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.deepPurple,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            ),
+                            onPressed: () async {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Starting MP3 generation...')),
+                              );
+                              try {
+                                await VoxApiService.generatePracticeMp3s(songId: widget.selectedSong!.id);
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('MP3 generation started successfully!')),
+                                  );
+                                }
+                              } catch (e) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red),
+                                  );
+                                }
+                              }
+                            },
+                          ),
+                          const SizedBox(width: 8),
+                          AiQueueButton(result: result, isVisible: true),
+                        ],
+                      );
                     },
                   ),
                 ],
