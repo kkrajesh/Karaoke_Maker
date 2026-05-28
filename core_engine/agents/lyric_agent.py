@@ -53,15 +53,54 @@ class LyricAgent:
             self.log(f"[WARN] Genius search failed: {e}")
         return None
 
-    def search_duckduckgo_lyrics(self, query):
-        """Perform a DuckDuckGo HTML search for lyrics."""
-        from duckduckgo_search import DDGS
-        search_term = f"{query} lyrics"
-        results = []
+    def clean_song_query(self, raw_query):
+        """Uses the LLM to extract a clean 'Song Name Movie Name' query."""
+        prompt = f"""
+You are an AI assistant that cleans up dirty song search queries.
+Extract the EXACT song name and the movie/album name from the following raw search query.
+Remove all extra junk like 'Video Song', 'Full Video', '4K', 'Lyrical Video', artist names (unless it's a famous pop song where artist is needed), 'Original Motion Picture Soundtrack', etc.
+Return ONLY the clean search string in the format: "[Song Name] [Movie Name]"
+
+Raw Query: {raw_query}
+"""
         try:
-            with DDGS() as ddgs:
-                for r in ddgs.text(search_term, max_results=5):
-                    results.append({"title": r.get("title", ""), "url": r.get("href", "")})
+            response = self.llm_client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            self.log(f"[WARN] LLM Query clean failed: {e}")
+            return raw_query
+
+    def search_duckduckgo_lyrics(self, query):
+        """Perform a DuckDuckGo HTML search for lyrics, prioritizing known sites."""
+        import warnings
+        
+        search_terms = [
+            f"{query} lyrics msidb m3db hindilyrics4u smule",
+            f"{query} lyrics"
+        ]
+        
+        results = []
+        urls_seen = set()
+        
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                try:
+                    from ddgs import DDGS
+                except ImportError:
+                    from duckduckgo_search import DDGS
+                    
+                with DDGS() as ddgs:
+                    for search_term in search_terms:
+                        for r in ddgs.text(search_term, max_results=5):
+                            url = r.get("href", "")
+                            if url and url not in urls_seen:
+                                urls_seen.add(url)
+                                results.append({"title": r.get("title", ""), "url": url})
         except Exception as e:
             self.log(f"[WARN] DuckDuckGo search failed: {e}")
         return results
@@ -82,7 +121,8 @@ I am searching for the lyrics to the song: "{query}"
 Here are the search results:
 {results_text}
 
-Identify the best result that is a dedicated lyrics website (e.g. Genius, Musixmatch, LyricsTranslate).
+Identify the best result that is a dedicated lyrics website.
+CRITICALLY IMPORTANT: If any of the results are from msidb.org, m3db.com, hindilyrics4u.com, or smule.com, you MUST prioritize picking them over other websites (like Genius or Musixmatch).
 Output ONLY valid JSON with the key "index" (integer) of the best result. No markdown formatting.
 """
         try:
@@ -106,18 +146,16 @@ Output ONLY valid JSON with the key "index" (integer) of the best result. No mar
             self.log(f"[WARN] LLM lyric source selection failed: {e}. Defaulting to first.")
             return search_results[0]["url"]
 
-    def extract_and_transliterate_lyrics(self, raw_text):
-        """Uses the LLM to extract lyrics from scraped text and transliterate them."""
+    def extract_lyrics(self, raw_text):
+        """Uses the LLM to extract lyrics from scraped text without translating them."""
         prompt = f"""
-You are an expert linguist and data extractor.
+You are an expert data extractor.
 I have scraped the raw text from a webpage that contains the lyrics to a song.
 However, there is a lot of website junk (menus, ads, footers) mixed in.
 
 Your tasks:
-1. Extract ONLY the pure song lyrics.
-2. If the lyrics are in a native Indian script (e.g., Telugu, Tamil, Hindi, Malayalam), TRANSLITERATE them into the English alphabet (do NOT translate the meaning, just the pronunciation).
-3. If they are already in the English alphabet, leave them as is.
-4. Output ONLY the final lyrics text. Do NOT include any intro text, conversational text, or the website junk.
+1. Extract ONLY the pure song lyrics exactly as they are written in the text.
+2. Output ONLY the final lyrics text. Do NOT include any intro text, conversational text, or the website junk.
 
 Webpage Text:
 {raw_text[:8000]} # Limit to avoid context window explosion
@@ -133,19 +171,12 @@ Webpage Text:
             self.log(f"[WARN] LLM Lyrics extraction failed: {e}")
             return None
 
-    def transliterate_to_english(self, lyrics):
-        """Uses the LLM to strictly transliterate native lyrics to English alphabet (Manglish/Tanglish)."""
+    def detect_language(self, lyrics):
         prompt = f"""
-You are an expert linguist. Your task is to strictly TRANSLITERATE the following lyrics into the LATIN ALPHABET (English letters A-Z).
-CRITICAL: Do NOT output any Hindi, Devanagari, Tamil, Telugu, or other native script. You must spell out the pronunciation using ONLY English letters.
-Example: 'नमस्ते' becomes 'Namaste'.
-Do NOT translate the meaning. Just convert the pronunciation into English characters (e.g., phonetic spelling).
-If the lyrics contain timestamps (e.g. [00:15.34]), you MUST preserve them exactly as they are.
-Output ONLY the transliterated text in the Latin alphabet.
-
-Lyrics:
-{lyrics[:8000]}
-"""
+        Identify the language of the following song lyrics. Reply ONLY with the name of the language (e.g., Hindi, Malayalam, Tamil, English, Telugu, Spanish). Do not explain or add extra text.
+        Lyrics:
+        {lyrics[:1000]}
+        """
         try:
             response = self.llm_client.chat.completions.create(
                 model=self.model,
@@ -154,8 +185,51 @@ Lyrics:
             )
             return response.choices[0].message.content.strip()
         except Exception as e:
-            self.log(f"[WARN] LLM Transliteration failed: {e}")
-            return None
+            self.log(f"[WARN] LLM Language detection failed: {e}")
+            return "English"
+
+    def generate_native_script(self, lyrics, language):
+        prompt = f"""
+        You are an expert linguist. The following lyrics are for a {language} song.
+        Rewrite these lyrics entirely in the native script of {language} (e.g. Devanagari for Hindi).
+        If they are already in the native script, just output them exactly as is.
+        You MUST preserve any timestamps (e.g., [00:15.34]) exactly as they appear.
+        Do not translate the meaning, just write the lyrics in the correct native script.
+        Output ONLY the lyrics, no other text.
+        Lyrics:
+        {lyrics[:8000]}
+        """
+        try:
+            response = self.llm_client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            self.log(f"[WARN] LLM Native script generation failed: {e}")
+            return lyrics
+
+    def generate_latin_script(self, lyrics, language):
+        prompt = f"""
+        You are an expert linguist. The following lyrics are for a {language} song.
+        Transliterate these lyrics strictly into the Latin alphabet (English characters A-Z) so a non-native speaker can pronounce them.
+        If they are already in the Latin alphabet (e.g. Hinglish, Manglish), just output them exactly as is.
+        You MUST preserve any timestamps (e.g., [00:15.34]) exactly as they appear.
+        Output ONLY the lyrics, no other text.
+        Lyrics:
+        {lyrics[:8000]}
+        """
+        try:
+            response = self.llm_client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            self.log(f"[WARN] LLM Latin script generation failed: {e}")
+            return lyrics
 
     def extract_poetic_meaning(self, lyrics):
         """Uses the LLM to generate a poetic meaning/translation of the lyrics."""
@@ -181,8 +255,23 @@ Lyrics:
     def search_youtube_lyrics(self, query):
         """Search YouTube for lyric videos and extract their descriptions."""
         import yt_dlp
+        
+        class QuietLogger:
+            def debug(self, msg): pass
+            def warning(self, msg): pass
+            def error(self, msg): pass
+            
         search_term = f"ytsearch3:{query} full lyrics"
-        ydl_opts = {'quiet': True, 'extract_flat': False} # Extract full info to get description
+        ydl_opts = {
+            'quiet': True, 
+            'extract_flat': False,
+            'logger': QuietLogger()
+        }
+        
+        ffmpeg_path = os.getenv("FFMPEG_PATH")
+        if ffmpeg_path:
+            ydl_opts['ffmpeg_location'] = ffmpeg_path
+            
         descriptions = ""
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -198,17 +287,21 @@ Lyrics:
 
     def fetch_lyrics(self, query):
         """Fetches lyrics without saving, returning the best available lyrics text and type."""
-        lyrics, is_synced = self.search_lrclib(query)
+        self.log(f"[WAIT] LyricAgent: Cleaning up query '{query}'...")
+        clean_query = self.clean_song_query(query)
+        self.log(f"[INFO] LyricAgent: Cleaned query -> '{clean_query}'")
+        
+        lyrics, is_synced = self.search_lrclib(clean_query)
         if lyrics:
             return {"text": lyrics, "type": "lrc" if is_synced else "txt", "source": "LRCLib"}
             
-        lyrics = self.search_genius(query)
+        lyrics = self.search_genius(clean_query)
         if lyrics:
             return {"text": lyrics, "type": "txt", "source": "Genius API"}
             
         # Fallback to Web Search and LLM extraction
-        search_results = self.search_duckduckgo_lyrics(query)
-        best_url = self.pick_best_lyric_source(query, search_results)
+        search_results = self.search_duckduckgo_lyrics(clean_query)
+        best_url = self.pick_best_lyric_source(clean_query, search_results)
         
         raw_text = ""
         if best_url:
@@ -222,10 +315,10 @@ Lyrics:
                 pass
                 
         if not raw_text or len(raw_text) < 100:
-            raw_text = self.search_youtube_lyrics(query)
+            raw_text = self.search_youtube_lyrics(clean_query)
             
         if raw_text and len(raw_text) > 100:
-            eng_lyrics = self.extract_and_transliterate_lyrics(raw_text)
+            eng_lyrics = self.extract_lyrics(raw_text)
             if eng_lyrics and len(eng_lyrics) > 20:
                 return {"text": eng_lyrics, "type": "txt", "source": "LLM Extracted"}
 
@@ -269,27 +362,34 @@ Lyrics:
             self.log(f"[INFO] LyricAgent: No lyrics found for '{query}'. Skipping lyrics.")
             return False
 
-        ext = ".lrc" if is_synced else ".txt"
-        native_path = os.path.join(target_dir, f"lyrics_native{ext}")
-        
-        # 1. Save Native Lyrics
-        with open(native_path, "w", encoding="utf-8") as f:
-            f.write(native_lyrics)
-        self.log(f"[OK] LyricAgent: Saved native lyrics from {source}.")
+        # 1. Detect Language
+        self.log("[WAIT] LyricAgent: Detecting song language...")
+        detected_lang = self.detect_language(native_lyrics)
+        self.log(f"[INFO] LyricAgent: Detected language -> {detected_lang}")
 
-        # 2. Transliterate to English
-        self.log(f"[WAIT] LyricAgent: Transliterating to English using LLM...")
-        eng_lyrics = self.transliterate_to_english(native_lyrics)
+        ext = ".lrc" if is_synced else ".txt"
         
-        if eng_lyrics and len(eng_lyrics) > 20:
+        # 2. Generate Native Script
+        self.log(f"[WAIT] LyricAgent: Generating Native {detected_lang} script...")
+        native_script = self.generate_native_script(native_lyrics, detected_lang)
+        if native_script:
+            native_path = os.path.join(target_dir, f"lyrics_native{ext}")
+            with open(native_path, "w", encoding="utf-8") as f:
+                f.write(native_script)
+            self.log("[OK] LyricAgent: Saved native script lyrics.")
+
+        # 3. Generate Latin Script (Transliteration)
+        self.log(f"[WAIT] LyricAgent: Generating Latin transliteration...")
+        latin_script = self.generate_latin_script(native_lyrics, detected_lang)
+        if latin_script:
             eng_path = os.path.join(target_dir, f"lyrics_english{ext}")
             with open(eng_path, "w", encoding="utf-8") as f:
-                f.write(eng_lyrics)
-            self.log(f"[OK] LyricAgent: Saved English lyrics.")
+                f.write(latin_script)
+            self.log("[OK] LyricAgent: Saved English (Latin) lyrics.")
             
-            # 3. Poetic Meaning
+            # 4. Poetic Meaning
             self.log(f"[WAIT] LyricAgent: Generating poetic meaning using LLM...")
-            meaning = self.extract_poetic_meaning(eng_lyrics)
+            meaning = self.extract_poetic_meaning(latin_script)
             if meaning:
                 meaning_path = os.path.join(target_dir, "lyrics_meaning.txt")
                 with open(meaning_path, "w", encoding="utf-8") as f:

@@ -34,6 +34,9 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
   String _selectedRootNote = 'C';
   PerformanceProfile? _performanceProfile;
   bool _isLoading = false;
+  
+  double _currentPitch = 0.0;
+  double _currentTempo = 1.0;
 
   @override
   void initState() {
@@ -246,10 +249,47 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                                 const SnackBar(content: Text('Starting MP3 generation...')),
                               );
                               try {
-                                await VoxApiService.generatePracticeMp3s(songId: widget.selectedSong!.id);
+                                await VoxApiService.generatePracticeMp3s(
+                                  songId: widget.selectedSong!.id,
+                                  pitchShift: _currentPitch,
+                                  tempoShift: _currentTempo,
+                                );
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(content: Text('MP3 generation started successfully!')),
+                                  );
+                                }
+                              } catch (e) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red),
+                                  );
+                                }
+                              }
+                            },
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton.icon(
+                            icon: const Icon(Icons.refresh, size: 16),
+                            label: const Text('Regenerate Lyrics'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.teal,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            ),
+                            onPressed: () async {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Re-processing lyrics through AI...')),
+                              );
+                              try {
+                                await VoxApiService.reprocessComponent(
+                                  songId: widget.selectedSong!.id,
+                                  title: widget.selectedSong!.title,
+                                  component: 'lyrics',
+                                );
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Lyrics regeneration started! Please wait...')),
                                   );
                                 }
                               } catch (e) {
@@ -287,6 +327,10 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                 final saveDir = (widget.selectedSong!.mmId != null && widget.selectedSong!.mmId!.isNotEmpty) ? VoxAiTrackingService.instance.getArtifactDirectory(widget.selectedSong!.mmId!, widget.selectedSong!.title) : widget.selectedSong!.directoryPath;
                 PerformanceProfileService.saveProfile(saveDir, profile);
               }
+            },
+            onAudioAdjustmentsChanged: (pitch, tempo) {
+              _currentPitch = pitch;
+              _currentTempo = tempo;
             },
             config: VoxDashboardConfig.practiceMode(),
           ),

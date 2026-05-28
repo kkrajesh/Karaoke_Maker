@@ -158,15 +158,37 @@ def reprocess_component():
     def run_task():
         try:
             skip_audio = component == 'lyrics'
+            
+            # Find the actual original audio file which might be prefixed
+            import glob
+            original_wavs = glob.glob(os.path.join(target_dir, "*original.wav"))
+            local_audio = original_wavs[0] if original_wavs else os.path.join(target_dir, "original.wav")
+            
             success = maker.process_specific_song(
                 song_id=song_id,
                 url=None, # It will use existing local original.wav
-                local_audio_path=os.path.join(target_dir, "original.wav"),
+                local_audio_path=local_audio,
                 lyrics_text=lyrics_text,
                 lyrics_type=lyrics_type,
                 target_dir_override=target_dir,
                 skip_audio=skip_audio
             )
+            
+            # Fix naming convention disconnect! If we are reprocessing inside the Vault,
+            # newly generated files won't have the songId prefix. We must rename them.
+            prefix = os.path.basename(target_dir) + "_"
+            for f in os.listdir(target_dir):
+                if not f.startswith(prefix) and os.path.isfile(os.path.join(target_dir, f)):
+                    if any(x in f for x in ['vocals', 'instrumental', 'pitch', 'map', 'lyrics', 'original']):
+                        old_path = os.path.join(target_dir, f)
+                        new_path = os.path.join(target_dir, prefix + f)
+                        if os.path.exists(new_path):
+                            try:
+                                os.remove(new_path)
+                            except Exception:
+                                pass
+                        os.rename(old_path, new_path)
+                        
             tasks[task_id] = {"status": "completed" if success else "failed"}
             if success:
                 print(f"[OK] Processing completely finished for {song_id}")
@@ -183,6 +205,8 @@ def reprocess_component():
 def generate_practice_mp3():
     data = request.json
     song_id = data.get('song_id')
+    pitch_shift = float(data.get('pitch_shift', 0.0))
+    tempo_shift = float(data.get('tempo_shift', 1.0))
     
     if not song_id:
         return jsonify({"error": "song_id is required"}), 400
@@ -205,6 +229,7 @@ def generate_practice_mp3():
     if not target_dir or not os.path.exists(target_dir):
         return jsonify({"error": f"Song directory not found for ID {song_id}"}), 404
 
+    print(f"[DEBUG] generate_practice_mp3: Resolved target_dir to {target_dir}")
     task_id = f"{song_id}_gen_mp3"
     tasks[task_id] = {"status": "processing"}
 
@@ -212,7 +237,7 @@ def generate_practice_mp3():
         try:
             from core_engine.mp3_generator import PracticeMp3Generator
             generator = PracticeMp3Generator(target_dir, ffmpeg_path=os.getenv("FFMPEG_PATH", "ffmpeg"))
-            success, msg = generator.generate_all()
+            success, msg = generator.generate_all(pitch_shift=pitch_shift, tempo_shift=tempo_shift)
             tasks[task_id] = {"status": "completed" if success else "failed", "message": msg}
             if success:
                 print(f"[OK] MP3 Generation finished for {song_id}: {msg}")

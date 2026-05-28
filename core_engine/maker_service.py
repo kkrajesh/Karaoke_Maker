@@ -127,8 +127,9 @@ class MakerService:
                 
         return search_results
 
-    def download_audio(self, download_url, target_dir, song_id):
+    def download_audio(self, download_url, target_dir, song_id, progress_callback=None):
         """Downloads audio from a specific URL."""
+        if progress_callback: progress_callback("Downloading Audio...")
         target_mp3 = os.path.join(target_dir, "original.wav")
         ydl_opts = {
             'format': 'bestaudio/best',
@@ -164,7 +165,7 @@ class MakerService:
             self.log(song_id, f"[ERROR] yt-dlp extraction failed: {e}")
             return False, None
 
-    def search_and_download_audio(self, song_query, target_dir):
+    def search_and_download_audio(self, song_query, target_dir, progress_callback=None):
         """Legacy automated workflow: Searches for the song, uses AudioAgent to pick the best, and downloads it."""
         song_id = os.path.basename(target_dir)
         
@@ -173,6 +174,7 @@ class MakerService:
             download_url = song_query
             self.log(song_id, f"[INFO] Using direct URL: {download_url}")
         else:
+            if progress_callback: progress_callback("Searching for Audio...")
             self.log(song_id, f"[WAIT] Searching and vetting results for '{song_query}'...")
             results = self.get_search_results(song_query)
             
@@ -185,12 +187,12 @@ class MakerService:
             self.log(song_id, f"     Reason: {best.get('reason')}")
             download_url = best['url']
         
-        success, actual_url = self.download_audio(download_url, target_dir, song_id)
+        success, actual_url = self.download_audio(download_url, target_dir, song_id, progress_callback)
         if success:
             return song_id, actual_url
         return None, None
 
-    def separate_audio(self, song_id, actual_url):
+    def separate_audio(self, song_id, actual_url, progress_callback=None):
         """Uses Demucs to split the downloaded original.wav into vocals and instrumental, then runs Pitch Analysis."""
         target_dir = os.path.join(self.hot_zone, song_id)
         original_mp3 = os.path.join(target_dir, "original.wav")
@@ -204,6 +206,7 @@ class MakerService:
                 self.log(song_id, f"[ERROR] original.wav not found for SongID: {song_id}")
                 return False
                 
+            if progress_callback: progress_callback("Separating Stems (Demucs)...")
             self.log(song_id, f"[WAIT] Starting Demucs separation for {song_id} (This may take a while)...")
             
             # Command to run our custom demucs wrapper that bypasses torchcodec
@@ -252,6 +255,7 @@ class MakerService:
             
         # --- 2. Pitch Analysis (Phase 2) ---
         if os.path.exists(final_vocals) and not os.path.exists(pitch_json_path):
+            if progress_callback: progress_callback("Analyzing Pitch...")
             self.log(song_id, f"[WAIT] Starting Pitch Analysis on vocals.wav...")
             try:
                 analyzer = PitchAnalyzer(fps=50)
@@ -265,6 +269,7 @@ class MakerService:
         # --- 3. Vocal Activity Map ---
         vocal_map_path = os.path.join(target_dir, "vocal_map.json")
         if os.path.exists(final_vocals) and not os.path.exists(vocal_map_path):
+            if progress_callback: progress_callback("Analyzing Vocal Activity...")
             self.log(song_id, f"[WAIT] Generating Vocal Activity Map...")
             try:
                 from .vocal_activity_analyzer import VocalActivityAnalyzer
@@ -275,7 +280,7 @@ class MakerService:
                 
         return True
 
-    def process_specific_song(self, song_id, url=None, local_audio_path=None, lyrics_text=None, lyrics_type="txt", target_dir_override=None, skip_audio=False):
+    def process_specific_song(self, song_id, url=None, local_audio_path=None, lyrics_text=None, lyrics_type="txt", target_dir_override=None, skip_audio=False, progress_callback=None):
         """API workflow: Takes a specific source and lyrics, and processes them."""
         target_dir = target_dir_override if target_dir_override else os.path.join(self.hot_zone, song_id)
         os.makedirs(target_dir, exist_ok=True)
@@ -283,6 +288,7 @@ class MakerService:
         self.log(song_id, f"[INFO] Starting specific processing for {song_id}")
         
         # 1. Process Lyrics
+        if progress_callback: progress_callback("Fetching Lyrics...")
         try:
             from core_engine.agents.lyric_agent import LyricAgent
             agent = LyricAgent()
@@ -323,7 +329,7 @@ class MakerService:
                 subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 os.remove(temp_file)
         elif url:
-            success, actual_url = self.download_audio(url, target_dir, song_id)
+            success, actual_url = self.download_audio(url, target_dir, song_id, progress_callback)
             if not success:
                 self.log(song_id, "[ERROR] Failed to download audio from URL.")
                 return False
@@ -332,7 +338,7 @@ class MakerService:
             return False
             
         # 3. Separate Audio & Analyze
-        return self.separate_audio(song_id, actual_url)
+        return self.separate_audio(song_id, actual_url, progress_callback)
 
     def process_song(self, song_query, force_reprocess=False):
         """Main workflow: Search -> Download -> Separate."""

@@ -30,6 +30,7 @@ This project is executed in **Linear Incremental Phases**. Each phase must be ve
 * **File:** `core_engine/maker_service.py`
 * **Action:** 1. `yt-dlp` download at 320kbps MP3 (Original Reference).
     2. `demucs` separation (OpenVINO accelerated) to produce `instrumental.wav` and `vocals.wav`.
+        2.1 ability to separate individual voices into separate files. Same for different instruments
 * **Storage:** Write outputs to `OneDrive/ActiveKaraoke/[SongID]/`.
 * **Logging:** Implement `debug.log` inside each song folder for troubleshooting.
 * **Metadata:** Embed source URL into the final audio files using FFmpeg.
@@ -72,9 +73,14 @@ This project is executed in **Linear Incremental Phases**. Each phase must be ve
     4. Integrate **Sync Mode** with inline Multi-Singer assignment, allowing precise real-time `.lrc` generation and dual-language auto-syncing.
     5. Implement advanced **Practice Mode** featuring dynamic A-B looping and Multi-Segment Sequences, complete with precision millisecond UI editors and JSON profile persistence.
     6. Build a custom **Interactive Segmented Progress Bar** allowing users to visually scrub, drag-to-resize, and drag-to-shift sequence segments directly on the timeline, with dynamic time overlays and anti-spam auto-seeking logic.
+    6.1 enhanced segmentation by adding where segments where instrumental vs vocals to be enabled - to make duet practicing easier. 
+    6.2 abillity to generate mp3s with embedded lyrics for the duets for each singer where the vocals for others are present and also including the music with vocals for those who want to practice singing the song with vocals.
     7. **Dual-Pane Lyrics Engine:** Intelligent responsive dual-language display that automatically switches between Portrait (Top/Bottom Stacked) and Landscape (Side-by-Side) synchronized lists when enough vertical space is available.
     8. **Non-Interrupting Settings Architecture:** Converted full-screen settings into seamless modal popups to guarantee that active practice sessions and audio engines remain mounted and undisrupted during configuration changes.
     9. **Intelligent UI Guards:** Dashboard UI contextually parses missing data (audio stems, pitch json, lyrics, video paths) and gracefully disables controls with contextual tooltips to prevent breaking states while maintaining visual consistency.
+    10. **Background Audio Playback:** Fully supported Background Audio Playback on Android devices via `vox_player_core`.
+    11. **Pitch & tempo controls**: provide ability to adjust pitch and tempo of the song during playback. Potentially create a MP3 for the selected pitch/tempo combination for the user to download and use. This can be done in the core engine using the pitch data and the segments, just like the current Gen mp3s logic but with pitch and tempo controls instead of just segments. 
+
 
 ## 🚩 Phase 6: Universal Search Engine (COMPLETED)
 **Task:** Decouple Search Logic for Cross-Platform Reusability.
@@ -112,6 +118,11 @@ This project is executed in **Linear Incremental Phases**. Each phase must be ve
 * **General future ideas**
 1.  **Duet Karaoke Generation** ability to use the segments for singer 1/2/3 and use that segment to generate Karaoke files for singer 1 - which will have other vocals and no vocals for singer 1 sections. Similarly for other singers as well
 2. ** Karaoke Video Generation with Image + Audio** using AI Video Generation using StableDiffusion+ffmpeg - incorporating lyrics, graph, singer parts, all customizable per generation.
+
+
+* **Bugs to Fix**
+1. after playing a song from Library, playing a youtube video plays both youtube video as well as the library vocals in the background.
+
 
 ---
 
