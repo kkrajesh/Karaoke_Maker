@@ -17,7 +17,6 @@ class BackendStatusWidget extends StatefulWidget {
 class _BackendStatusWidgetState extends State<BackendStatusWidget> {
   Timer? _pollingTimer;
   bool _apiServerOnline = false;
-  bool _queueWatcherOnline = false;
   bool _isChecking = true;
 
   @override
@@ -34,7 +33,7 @@ class _BackendStatusWidgetState extends State<BackendStatusWidget> {
   }
 
   Future<void> _checkStatus() async {
-    // Check API Server
+    // Check Orchestrator Server
     try {
       final response = await http.get(Uri.parse('http://127.0.0.1:5000/health')).timeout(const Duration(seconds: 2));
       if (response.statusCode == 200) {
@@ -45,25 +44,6 @@ class _BackendStatusWidgetState extends State<BackendStatusWidget> {
       }
     } catch (e) {
       _apiServerOnline = false;
-    }
-
-    // Check Queue Watcher via heartbeat
-    try {
-      final hotZone = VoxSettingsService.instance.aiHotZonePath;
-      final statusFile = File('$hotZone\\watcher_status.json');
-      if (await statusFile.exists()) {
-        final contents = await statusFile.readAsString();
-        final data = jsonDecode(contents);
-        final timestamp = data['timestamp'] as double;
-        final now = DateTime.now().millisecondsSinceEpoch / 1000;
-        
-        // If heartbeat is less than 15 seconds old, it's alive
-        _queueWatcherOnline = (now - timestamp) < 15;
-      } else {
-        _queueWatcherOnline = false;
-      }
-    } catch (e) {
-      _queueWatcherOnline = false;
     }
 
     if (mounted) {
@@ -80,7 +60,7 @@ class _BackendStatusWidgetState extends State<BackendStatusWidget> {
       await Process.start(
         'cmd',
         ['/c', 'start', title, 'py', scriptName],
-        workingDirectory: scriptName == 'queue_watcher.py' ? Directory(enginePath).parent.path : enginePath,
+        workingDirectory: enginePath,
       );
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Starting $title...')));
       
@@ -181,19 +161,19 @@ class _BackendStatusWidgetState extends State<BackendStatusWidget> {
           ),
           const SizedBox(height: 24),
           _buildServiceCard(
-            title: 'Karaoke API Server',
-            scriptName: 'api_server.py',
+            title: 'Karaoke Engine Orchestrator',
+            scriptName: 'karaoke_orchestrator.py',
             isOnline: _apiServerOnline,
             icon: Icons.hub,
-            dependentFeatures: ['Universal Song Search', 'YouTube Fetcher', 'Lyrics Fetcher (AI)', 'Practice MP3 Generator', 'Stem Processing'],
-          ),
-          const SizedBox(height: 16),
-          _buildServiceCard(
-            title: 'AI Queue Watcher',
-            scriptName: 'queue_watcher.py',
-            isOnline: _queueWatcherOnline,
-            icon: Icons.remove_red_eye,
-            dependentFeatures: ['Background Job Processing', 'Automated AI Extraction', 'Automated Database Ingestion'],
+            dependentFeatures: [
+              'Universal Song Search', 
+              'YouTube Fetcher', 
+              'Lyrics Fetcher (AI)', 
+              'Practice MP3 Generator', 
+              'Stem Processing',
+              'Background Job Management', 
+              'Database Ingestion'
+            ],
           ),
         ],
       ),
