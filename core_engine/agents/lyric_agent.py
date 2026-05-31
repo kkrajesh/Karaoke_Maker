@@ -57,9 +57,9 @@ class LyricAgent:
         """Uses the LLM to extract a clean 'Song Name Movie Name' query."""
         prompt = f"""
 You are an AI assistant that cleans up dirty song search queries.
-Extract the EXACT song name and the movie/album name from the following raw search query.
-Remove all extra junk like 'Video Song', 'Full Video', '4K', 'Lyrical Video', artist names (unless it's a famous pop song where artist is needed), 'Original Motion Picture Soundtrack', etc.
-Return ONLY the clean search string in the format: "[Song Name] [Movie Name]"
+Your ONLY job is to remove extra junk words like 'Video Song', 'Full Video', '4K', 'Lyrical Video', etc.
+DO NOT ADD ANY NEW WORDS. DO NOT ADD MOVIE NAMES. DO NOT ADD ARTIST NAMES.
+Just return the clean query, nothing else.
 
 Raw Query: {raw_query}
 """
@@ -79,7 +79,9 @@ Raw Query: {raw_query}
         import warnings
         
         search_terms = [
-            f"{query} lyrics msidb m3db hindilyrics4u smule",
+            f"{query} lyrics site:m3db.com",
+            f"{query} lyrics site:msidb.org",
+            f"{query} lyrics site:hindilyrics4u.com",
             f"{query} lyrics"
         ]
         
@@ -94,13 +96,23 @@ Raw Query: {raw_query}
                 except ImportError:
                     from duckduckgo_search import DDGS
                     
-                with DDGS() as ddgs:
-                    for search_term in search_terms:
-                        for r in ddgs.text(search_term, max_results=5):
-                            url = r.get("href", "")
-                            if url and url not in urls_seen:
-                                urls_seen.add(url)
-                                results.append({"title": r.get("title", ""), "url": url})
+                import concurrent.futures
+                
+                def _do_search():
+                    res = []
+                    with DDGS() as ddgs:
+                        for search_term in search_terms:
+                            for r in ddgs.text(search_term, max_results=5):
+                                url = r.get("href", "")
+                                if url and url not in urls_seen:
+                                    urls_seen.add(url)
+                                    res.append({"title": r.get("title", ""), "url": url})
+                    return res
+                    
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(_do_search)
+                    # 10 second timeout for DuckDuckGo
+                    results = future.result(timeout=10)
         except Exception as e:
             self.log(f"[WARN] DuckDuckGo search failed: {e}")
         return results
@@ -274,13 +286,16 @@ Lyrics:
             
         descriptions = ""
         try:
+            self.log(f"[DEBUG] Searching YouTube with term: {search_term}")
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(search_term, download=False)
                 if 'entries' in info:
+                    self.log(f"[DEBUG] Found {len(info['entries'])} YouTube results.")
                     for entry in info['entries']:
                         desc = entry.get('description', '')
                         if desc and len(desc) > 100:
                             descriptions += f"\n--- VIDEO DESCRIPTION ---\n{desc}\n"
+            self.log(f"[DEBUG] Combined YouTube descriptions length: {len(descriptions)}")
         except Exception as e:
             self.log(f"[WARN] YouTube search failed: {e}")
         return descriptions
@@ -315,12 +330,19 @@ Lyrics:
                 pass
                 
         if not raw_text or len(raw_text) < 100:
+            self.log("[DEBUG] Web search yielded no valid text, falling back to YouTube...")
             raw_text = self.search_youtube_lyrics(clean_query)
             
         if raw_text and len(raw_text) > 100:
+            self.log("[DEBUG] Sending raw text to LLM for lyric extraction...")
             eng_lyrics = self.extract_lyrics(raw_text)
             if eng_lyrics and len(eng_lyrics) > 20:
+                self.log("[DEBUG] Returning successfully extracted lyrics.")
                 return {"text": eng_lyrics, "type": "txt", "source": "LLM Extracted"}
+            else:
+                self.log(f"[WARN] Extracted lyrics were too short or empty: {len(eng_lyrics) if eng_lyrics else 0} chars.")
+        else:
+            self.log("[WARN] Raw text was still empty or too short after all fallbacks.")
 
         return {"text": "", "type": "txt", "source": "None"}
 

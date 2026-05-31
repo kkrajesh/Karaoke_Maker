@@ -243,7 +243,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: UnifiedSearchUI(
               providers: [
                 YoutubeSearchProvider(),
-                MediaMonkeySearchProvider(),
+                MediaMonkeySearchProvider(prioritizeLocal: true),
               ],
               actionBuilder: (context, result) {
                 return Row(

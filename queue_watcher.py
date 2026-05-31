@@ -10,19 +10,29 @@ def main():
     print("      AI Queue Watcher Started         ")
     print("=======================================")
 
-    load_dotenv()
-    hot_zone = os.getenv("AI_HOTZONE")
-    if not hot_zone:
-        print("[ERROR] AI_HOTZONE not set in .env")
-        return
-
-    queue_file = os.path.join(hot_zone, "ai_queue.json")
-    print(f"[INFO] Watching queue file: {queue_file}")
-
     maker = MakerService()
+    current_queue_file = None
 
     while True:
         try:
+            load_dotenv(override=True)
+            hot_zone = os.getenv("AI_HOTZONE")
+            
+            if not hot_zone:
+                print("[ERROR] AI_HOTZONE not set in .env")
+                time.sleep(10)
+                continue
+                
+            queue_file = os.path.join(hot_zone, "ai_queue.json")
+            
+            if queue_file != current_queue_file:
+                print(f"[INFO] Watching queue file: {queue_file}")
+                current_queue_file = queue_file
+                
+            # Write Heartbeat
+            status_file = os.path.join(hot_zone, "watcher_status.json")
+            _atomic_write(status_file, {"status": "online", "timestamp": time.time()})
+
             if not os.path.exists(queue_file):
                 time.sleep(10)
                 continue
@@ -52,6 +62,7 @@ def main():
             task = queue_data[pending_idx]
             task["status"] = "processing"
             task["statusText"] = "Initializing..."
+            task["logs"] = ["Task picked up by Queue Watcher"]
             
             # Clean up the task title/id using LyricAgent so we get a beautiful folder name
             task_title = task.get("title", "")
@@ -60,13 +71,14 @@ def main():
                     from core_engine.agents.lyric_agent import LyricAgent
                     agent = LyricAgent()
                     clean_title = agent.clean_song_query(task_title)
-                    task["title"] = clean_title
-                    task["id"] = sanitize_filename(clean_title)
+                    task["cleanTitle"] = clean_title
+                    task["cleanId"] = sanitize_filename(clean_title)
                 except Exception as e:
                     print(f"[QUEUE] Error cleaning title: {e}")
             
             _atomic_write(queue_file, queue_data)
 
+            start_time = time.time()
             print(f"\n[QUEUE] Starting task: {task.get('title')} - {task.get('artist')}")
             
             def update_progress(msg):
@@ -76,14 +88,27 @@ def main():
                     for i, item in enumerate(q):
                         if item.get("id") == task.get("id"):
                             q[i]["statusText"] = msg
+                            if "logs" not in q[i]:
+                                q[i]["logs"] = []
+                                
+                            elapsed = time.time() - start_time
+                            mins, secs = divmod(elapsed, 60)
+                            time_str = f"[{int(mins):02d}:{int(secs):02d}] "
+                            formatted_msg = time_str + msg
+                            
+                            q[i]["logs"].append(formatted_msg)
                             break
                     _atomic_write(queue_file, q)
                 except Exception as e:
                     print(f"[QUEUE] Error updating progress: {e}")
             
             # Generate a safe folder name (song_id) for the processing directory
+            clean_id = task.get("cleanId", "")
             task_id = str(task.get("id", ""))
-            if task_id:
+            
+            if clean_id:
+                song_id = sanitize_filename(clean_id)
+            elif task_id:
                 song_id = sanitize_filename(task_id)
             else:
                 safe_title = sanitize_filename(task.get("title", "Unknown_Title"))
@@ -102,6 +127,20 @@ def main():
                 if task.get("sourceType", "").lower() == "localdirectory":
                     local_path = url
                     url = None
+
+                # Handle fetchOriginalAudio
+                if task.get("fetchOriginalAudio", False):
+                    print(f"[WAIT] Fetch original audio requested. Ignoring local file and searching web...")
+                    url = None
+                    local_path = None
+                    search_query = task.get("cleanTitle") or task.get("title")
+                    results = maker.get_search_results(search_query)
+                    best = next((r for r in results if r.get('recommended')), None)
+                    if best:
+                        url = best['url']
+                        print(f"[OK] Found web audio: {url}")
+                    else:
+                        print(f"[ERROR] Failed to find web audio for {search_query}")
                 
                 success = maker.process_specific_song(
                     song_id=song_id,
@@ -141,6 +180,11 @@ def main():
 
         # Short sleep before checking for the next task
         time.sleep(2)
+        
+        # Write heartbeat during sleep cycles as well
+        if current_queue_file and os.path.exists(os.path.dirname(current_queue_file)):
+            status_file = os.path.join(os.path.dirname(current_queue_file), "watcher_status.json")
+            _atomic_write(status_file, {"status": "online", "timestamp": time.time()})
 
 def _atomic_write(filepath, data):
     temp_path = f"{filepath}.tmp"

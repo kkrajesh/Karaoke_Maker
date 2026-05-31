@@ -5,8 +5,11 @@ VoxPro (the `practice_app`) is the frontend Flutter desktop application for the 
 > [!NOTE]
 > As of **Phase 5**, the core UI, audio playback, pitch tracking, and lyrics parsing have been modularized and moved into the shared `vox_player_core` package. The `practice_app` now acts as a thin client shell that mounts the `VoxPlayerDashboard` and `UnifiedSearchUI`.
 
+## 🚀 Release Notes (v1.5.2)
+- **Settings & Dashboard Integration**: Added a dedicated "Services" tab leveraging updates from `vox_player_core` to natively spawn and monitor Python core services (`api_server.py` and `queue_watcher.py`).
+- **AI Queue Log Reviewer**: Enhanced the AI Queue Manager with a real-time, terminal-style log reviewer for processing tasks, complete with elapsed runtime timestamps.
+
 ## 🚀 Release Notes (v1.5.1)
-- Integrated AI Queue Manager overlay to track real-time backend Python processing tasks.
 - Added UI capability to forcefully "Regenerate Lyrics" using the bi-directional AI models in the core engine.
 - Synced `VoxPlayerCore` v0.3.0 which resolves background dual-playback bugs and `media_kit` lifecycle edge cases.
 

@@ -24,6 +24,10 @@ lyric_agent = LyricAgent()
 # In-memory store for background tasks
 tasks = {}
 
+@app.route('/health', methods=['GET'])
+def health_check():
+    return jsonify({"status": "online"})
+
 @app.route('/search', methods=['GET'])
 def search():
     query = request.args.get('q')
@@ -100,6 +104,7 @@ def reprocess_component():
     if not song_id or not component:
         return jsonify({"error": "song_id and component are required"}), 400
 
+    load_dotenv(dotenv_path=env_path, override=True)
     target_dir = None
     hotzone = os.getenv("AI_HOTZONE", ".")
     vault = os.getenv("AI_VAULT", ".")
@@ -211,6 +216,7 @@ def generate_practice_mp3():
     if not song_id:
         return jsonify({"error": "song_id is required"}), 400
 
+    load_dotenv(dotenv_path=env_path, override=True)
     target_dir = None
     hotzone = os.getenv("AI_HOTZONE", ".")
     vault = os.getenv("AI_VAULT", ".")

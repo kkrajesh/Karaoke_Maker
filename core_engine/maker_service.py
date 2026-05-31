@@ -295,6 +295,11 @@ class MakerService:
             
             def lyric_logger(msg):
                 self.log(song_id, msg)
+                if progress_callback:
+                    if msg.startswith("[WAIT] LyricAgent: "):
+                        progress_callback(msg.replace("[WAIT] LyricAgent: ", ""))
+                    elif msg.startswith("[INFO] LyricAgent: Detected language"):
+                        progress_callback(msg.replace("[INFO] LyricAgent: ", ""))
                 
             query = song_id.replace("_", " ")
             agent.process_lyrics(

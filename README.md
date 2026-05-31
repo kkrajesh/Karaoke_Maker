@@ -27,10 +27,27 @@ Karaoke Maker is an automated pipeline designed to search, download, and process
 3. Install Python dependencies: `pip install -r core_engine/requirements.txt`
 4. Run Flutter pub get: `cd practice_app && flutter pub get`
 
-## 🕹 Usage Instructions
-1. Start the Python Backend: `cd core_engine && python api_server.py`
-2. Start the Flutter App: `cd practice_app && flutter run -d windows`
-3. Use the Dashboard to queue new songs or open the Active Session to practice with real-time pitch tracking.
+## 🕹 Unified Startup Sequence
+To run the full ecosystem (Backend Services + Flutter Apps):
+
+**1. Start the Python API Server (Flask Backend)**
+```bash
+cd core_engine
+python api_server.py
+```
+*Note: This provides the `/health` endpoint and handles search, lyrics, stem processing, and MP3 generation.*
+
+**2. Start the AI Queue Watcher**
+```bash
+python queue_watcher.py
+```
+*Note: This background job processes automated tasks from `ai_queue.json` and updates the heartbeat for the Flutter app.*
+
+**3. Start the Flutter Apps**
+- For the Practice App: `cd practice_app && flutter run -d windows`
+- For the Host App: `cd ../karaoke_app && flutter run -d windows`
+
+*Pro Tip: You can now monitor and start these Python backend services directly from the Settings > Services dashboard in the Flutter apps!*
 
 ## 🧰 Maintenance and Troubleshooting
 ### Fixing Orphaned AI Vault Folders

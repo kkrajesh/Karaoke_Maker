@@ -34,6 +34,8 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
   String _selectedRootNote = 'C';
   PerformanceProfile? _performanceProfile;
   bool _isLoading = false;
+  String? _currentLyricsDir;
+  String? _currentVocalsPath;
   
   double _currentPitch = 0.0;
   double _currentTempo = 1.0;
@@ -60,6 +62,8 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
       _vocalMapData = [];
       _songLyrics = null;
       _performanceProfile = null;
+      _currentLyricsDir = null;
+      _currentVocalsPath = null;
     });
 
     if (widget.selectedSong == null) {
@@ -160,6 +164,8 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
 
     if (mounted) {
       setState(() {
+        _currentLyricsDir = lyricsDir;
+        _currentVocalsPath = vocalsPath;
         _isLoading = false;
       });
     }
@@ -319,8 +325,8 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
             lyrics: _songLyrics,
             pitchData: _targetPitchData,
             vocalMapData: _vocalMapData,
-            directoryPath: (widget.selectedSong!.mmId != null && widget.selectedSong!.mmId!.isNotEmpty) ? VoxAiTrackingService.instance.getArtifactDirectory(widget.selectedSong!.mmId!, widget.selectedSong!.title) : widget.selectedSong!.directoryPath,
-            vocalsPath: (widget.selectedSong!.mmId != null && widget.selectedSong!.mmId!.isNotEmpty) ? VoxAiTrackingService.instance.getVocalsPath(widget.selectedSong!.mmId!, widget.selectedSong!.title) : "${widget.selectedSong!.directoryPath}${Platform.pathSeparator}vocals.wav",
+            directoryPath: _currentLyricsDir ?? widget.selectedSong!.directoryPath,
+            vocalsPath: _currentVocalsPath,
             performanceProfile: _performanceProfile,
             onProfileSaved: (profile) {
               if (widget.selectedSong != null) {

@@ -7,6 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../services/settings_service.dart';
 import '../theme/voxpro_theme.dart';
 import 'admin_ingestion_dialog.dart';
+import 'backend_status_widget.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -29,8 +30,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late TextEditingController _vaultController;
   late TextEditingController _hotZoneController;
   late TextEditingController _dbController;
+  late TextEditingController _andMmdbController;
   late TextEditingController _winRootController;
   late TextEditingController _andRootController;
+  late TextEditingController _engineController;
+  late bool _prioritizeLocalSearch;
   late double _micLatency;
 
   @override
@@ -39,8 +43,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _vaultController = TextEditingController(text: VoxSettingsService.instance.aiVaultPath);
     _hotZoneController = TextEditingController(text: VoxSettingsService.instance.aiHotZonePath);
     _dbController = TextEditingController(text: VoxSettingsService.instance.mediaMonkeyDbPath);
+    _andMmdbController = TextEditingController(text: VoxSettingsService.instance.androidMmdbPath);
     _winRootController = TextEditingController(text: VoxSettingsService.instance.windowsMusicRoot);
     _andRootController = TextEditingController(text: VoxSettingsService.instance.androidMusicRoot);
+    _engineController = TextEditingController(text: VoxSettingsService.instance.karaokeMakerEnginePath);
+    _prioritizeLocalSearch = VoxSettingsService.instance.prioritizeLocalSearch;
     _micLatency = VoxSettingsService.instance.micLatencyOffset.toDouble();
     
     // In case we opened this screen very fast, wait for settings to finish loading then update UI
@@ -50,8 +57,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _vaultController.text = VoxSettingsService.instance.aiVaultPath;
           _hotZoneController.text = VoxSettingsService.instance.aiHotZonePath;
           _dbController.text = VoxSettingsService.instance.mediaMonkeyDbPath;
+          _andMmdbController.text = VoxSettingsService.instance.androidMmdbPath;
           _winRootController.text = VoxSettingsService.instance.windowsMusicRoot;
           _andRootController.text = VoxSettingsService.instance.androidMusicRoot;
+          _engineController.text = VoxSettingsService.instance.karaokeMakerEnginePath;
+          _prioritizeLocalSearch = VoxSettingsService.instance.prioritizeLocalSearch;
           _micLatency = VoxSettingsService.instance.micLatencyOffset.toDouble();
         });
       }
@@ -63,8 +73,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _vaultController.dispose();
     _hotZoneController.dispose();
     _dbController.dispose();
+    _andMmdbController.dispose();
     _winRootController.dispose();
     _andRootController.dispose();
+    _engineController.dispose();
     super.dispose();
   }
 
@@ -84,8 +96,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await VoxSettingsService.instance.setAiVaultPath(newVault);
     await VoxSettingsService.instance.setAiHotZonePath(newHotZone);
     await VoxSettingsService.instance.setMediaMonkeyDbPath(_dbController.text);
+    await VoxSettingsService.instance.setAndroidMmdbPath(_andMmdbController.text);
     await VoxSettingsService.instance.setWindowsMusicRoot(_winRootController.text);
     await VoxSettingsService.instance.setAndroidMusicRoot(_andRootController.text);
+    await VoxSettingsService.instance.setKaraokeMakerEnginePath(_engineController.text);
+    await VoxSettingsService.instance.setPrioritizeLocalSearch(_prioritizeLocalSearch);
     await VoxSettingsService.instance.setMicLatencyOffset(_micLatency.toInt());
     
     if (mounted) {
@@ -177,7 +192,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final settings = Provider.of<SettingsService>(context);
 
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: AlertDialog(
         backgroundColor: VoxProTheme.cardBg,
         title: const Text('Settings'),
@@ -198,6 +213,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   Tab(text: 'Visualizer'),
                   Tab(text: 'Paths'),
                   Tab(text: 'Admin'),
+                  Tab(text: 'Services'),
                 ],
               ),
               const SizedBox(height: 16),
@@ -256,6 +272,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             allowedExtensions: ['db', 'DB'],
                           ),
                           const SizedBox(height: 16),
+                          const Text('Android MediaMonkey DB (MM.DB)', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                          const SizedBox(height: 4),
+                          _buildPathSelector(
+                            controller: _andMmdbController,
+                            onPathSelected: (p) => _andMmdbController.text = p,
+                            isDirectory: false,
+                            allowedExtensions: ['db', 'DB'],
+                          ),
+                          const SizedBox(height: 16),
                           const Text('Windows Music Root', style: TextStyle(color: Colors.white70, fontSize: 12)),
                           const SizedBox(height: 4),
                           _buildPathSelector(
@@ -272,6 +297,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             isDirectory: true,
                           ),
                           const SizedBox(height: 16),
+                          SwitchListTile(
+                            title: const Text('Prioritize Local Database Search', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                            subtitle: const Text('Check local DB before falling back to remote host', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                            value: _prioritizeLocalSearch,
+                            onChanged: (val) {
+                              setState(() => _prioritizeLocalSearch = val);
+                            },
+                            contentPadding: EdgeInsets.zero,
+                            activeColor: VoxProTheme.accent,
+                          ),
+                          const SizedBox(height: 16),
                           const Text('AI Vault Directory', style: TextStyle(color: Colors.white70, fontSize: 12)),
                           const SizedBox(height: 4),
                           _buildPathSelector(
@@ -285,6 +321,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           _buildPathSelector(
                             controller: _hotZoneController,
                             onPathSelected: (p) => _hotZoneController.text = p,
+                            isDirectory: true,
+                          ),
+                          const SizedBox(height: 16),
+                          const Text('Karaoke Maker Engine Directory', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                          const SizedBox(height: 4),
+                          _buildPathSelector(
+                            controller: _engineController,
+                            onPathSelected: (p) => _engineController.text = p,
                             isDirectory: true,
                           ),
                           const SizedBox(height: 24),
@@ -341,15 +385,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ElevatedButton.icon(
                             icon: const Icon(Icons.drive_file_rename_outline),
                             label: const Text('Migrate Legacy Vault Files'),
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[800]),
-                            onPressed: () => _migrateLegacyVault(context, VoxSettingsService.instance.aiVaultPath),
-                          ),
-                        ],
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[800]),
+                              onPressed: () => _migrateLegacyVault(context, VoxSettingsService.instance.aiVaultPath),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                      // Tab 4: Services
+                      const BackendStatusWidget(),
+                    ],
+                  ),
                 ),
-              ),
             ],
           ),
         ),
