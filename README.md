@@ -2,6 +2,12 @@
 
 Karaoke Maker is an automated pipeline designed to search, download, and process high-fidelity audio tracks to generate clean instrumental and vocal stems. It includes a Python Backend for audio separation/LLM analysis, and a Flutter Practice App frontend.
 
+## 🚀 Release Notes (v1.4.0)
+- **FastAPI Migration**: Refactored the core engine from a multi-process Flask/Worker architecture to a unified `karaoke_orchestrator.py` FastAPI server.
+- **WebSocket Hub**: Eliminated file-system polling in favor of high-performance WebSockets for active AI Queue management.
+- **Advanced Reprocessing**: Introduced capabilities to force re-download corrupted Audio/Lyrics artifacts natively via the UI.
+- **Bug Fixes**: Resolved critical downloader crashing issues and mismatched JSON payloads between Dart frontend and Python backend.
+
 ## 🚀 Release Notes (v1.3.0)
 - Completed Phase 5: Live Pitch Visualizer Engine with advanced Practice Mode and A-B looping.
 - Completed Phase 6: Universal Search Engine decoupled for cross-platform reusability.
@@ -30,18 +36,12 @@ Karaoke Maker is an automated pipeline designed to search, download, and process
 ## 🕹 Unified Startup Sequence
 To run the full ecosystem (Backend Services + Flutter Apps):
 
-**1. Start the Python API Server (Flask Backend)**
+**1. Start the Orchestrator API Server**
 ```bash
 cd core_engine
-python api_server.py
+python karaoke_orchestrator.py
 ```
-*Note: This provides the `/health` endpoint and handles search, lyrics, stem processing, and MP3 generation.*
-
-**2. Start the AI Queue Watcher**
-```bash
-python queue_watcher.py
-```
-*Note: This background job processes automated tasks from `ai_queue.json` and updates the heartbeat for the Flutter app.*
+*Note: This replaces both the old `api_server.py` and `queue_watcher.py`. It handles search, lyrics, stem processing, MP3 generation, and real-time WebSocket queue syncing.*
 
 **3. Start the Flutter Apps**
 - For the Practice App: `cd practice_app && flutter run -d windows`

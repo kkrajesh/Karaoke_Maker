@@ -57,9 +57,14 @@ class LyricAgent:
         """Uses the LLM to extract a clean 'Song Name Movie Name' query."""
         prompt = f"""
 You are an AI assistant that cleans up dirty song search queries.
-Your ONLY job is to remove extra junk words like 'Video Song', 'Full Video', '4K', 'Lyrical Video', etc.
-DO NOT ADD ANY NEW WORDS. DO NOT ADD MOVIE NAMES. DO NOT ADD ARTIST NAMES.
-Just return the clean query, nothing else.
+Your ONLY job is to extract the core 'Song Title' and optionally the 'Movie/Album Name'.
+You MUST aggressively REMOVE:
+- Extra junk words like 'Video Song', 'Full Video', '4K', 'Lyrical Video', 'Official Video', 'HD'
+- Names of actors or cast (e.g., Salman, Aishwarya Rai)
+- Names of singers (e.g., Udit N, Alka Y)
+- Punctuation like '|' or '-'
+
+Return ONLY the clean query (e.g., "Chand Chhupa Badal Mein Hum Dil De Chuke Sanam"), nothing else.
 
 Raw Query: {raw_query}
 """
@@ -76,7 +81,8 @@ Raw Query: {raw_query}
 
     def search_duckduckgo_lyrics(self, query):
         """Perform a DuckDuckGo HTML search for lyrics, prioritizing known sites."""
-        import warnings
+        import requests
+        from bs4 import BeautifulSoup
         
         search_terms = [
             f"{query} lyrics site:m3db.com",
@@ -89,32 +95,27 @@ Raw Query: {raw_query}
         urls_seen = set()
         
         try:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                try:
-                    from ddgs import DDGS
-                except ImportError:
-                    from duckduckgo_search import DDGS
-                    
-                import concurrent.futures
-                
-                def _do_search():
-                    res = []
-                    with DDGS() as ddgs:
-                        for search_term in search_terms:
-                            for r in ddgs.text(search_term, max_results=5):
-                                url = r.get("href", "")
-                                if url and url not in urls_seen:
-                                    urls_seen.add(url)
-                                    res.append({"title": r.get("title", ""), "url": url})
-                    return res
-                    
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(_do_search)
-                    # 10 second timeout for DuckDuckGo
-                    results = future.result(timeout=10)
+            for search_term in search_terms:
+                response = requests.post(
+                    'https://lite.duckduckgo.com/lite/', 
+                    data={'q': search_term}, 
+                    headers={'User-Agent': 'Mozilla/5.0'},
+                    timeout=5
+                )
+                if response.status_code == 200:
+                    soup = BeautifulSoup(response.text, 'html.parser')
+                    for a in soup.find_all('a'):
+                        href = a.get('href', '')
+                        if href.startswith('http') and 'duckduckgo.com' not in href:
+                            if href not in urls_seen:
+                                urls_seen.add(href)
+                                results.append({"title": a.text.strip(), "url": href})
+                        # Limit to a few results per search term to keep the list reasonable
+                        if len(results) >= 15:
+                            break
         except Exception as e:
-            self.log(f"[WARN] DuckDuckGo search failed: {e}")
+            self.log(f"[WARN] DuckDuckGo Lite search failed: {e}")
+            
         return results
 
     def pick_best_lyric_source(self, query, search_results):

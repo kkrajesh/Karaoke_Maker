@@ -5,6 +5,7 @@ import time
 import asyncio
 import sqlite3
 import subprocess
+import traceback
 from contextlib import asynccontextmanager
 from typing import List, Optional, Dict, Any
 
@@ -50,9 +51,25 @@ def init_db():
             clean_id TEXT,
             clean_title TEXT,
             fetch_original_audio INTEGER,
+            force_reprocess INTEGER DEFAULT 0,
             logs TEXT
         )
     ''')
+    
+    # Add force_reprocess column if it doesn't exist
+    try:
+        c.execute("ALTER TABLE queue_items ADD COLUMN force_reprocess INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass # Column already exists
+        
+    try:
+        c.execute("ALTER TABLE queue_items ADD COLUMN reprocess_component TEXT DEFAULT 'all'")
+    except sqlite3.OperationalError:
+        pass
+    
+    # Reset any stuck tasks from a previous run
+    c.execute("UPDATE queue_items SET status='failed', status_text='Worker crashed or server restarted' WHERE status='processing' OR status='pending'")
+    
     conn.commit()
     conn.close()
 
@@ -126,7 +143,9 @@ def row_to_dict(row, cursor):
         "lyricsType": d.get("lyrics_type"),
         "cleanId": d.get("clean_id"),
         "cleanTitle": d.get("clean_title"),
-        "fetchOriginalAudio": d.get("fetch_original_audio"),
+        "fetchOriginalAudio": bool(d.get("fetch_original_audio")),
+        "forceReprocess": bool(d.get("force_reprocess")),
+        "reprocessComponent": d.get("reprocess_component", "all"),
         "logs": d.get("logs")
     }
 
@@ -140,6 +159,8 @@ class QueueItemCreate(BaseModel):
     lyricsText: Optional[str] = None
     lyricsType: Optional[str] = None
     fetchOriginalAudio: Optional[bool] = False
+    forceReprocess: Optional[bool] = False
+    reprocessComponent: Optional[str] = "all"
 
 class QueueStatusUpdate(BaseModel):
     status: str
@@ -206,9 +227,9 @@ async def add_to_queue(item: QueueItemCreate, background_tasks: BackgroundTasks)
             c.execute('DELETE FROM queue_items WHERE id = ?', (item.id,))
             
     c.execute('''
-        INSERT INTO queue_items (id, title, artist, url, source_type, status, status_text, lyrics_text, lyrics_type, fetch_original_audio, logs)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (item.id, item.title, item.artist, item.url, item.sourceType, 'pending', 'Queued', item.lyricsText, item.lyricsType, int(item.fetchOriginalAudio), '[]'))
+        INSERT INTO queue_items (id, title, artist, url, source_type, status, status_text, lyrics_text, lyrics_type, fetch_original_audio, force_reprocess, reprocess_component, logs)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (item.id, item.title, item.artist, item.url, item.sourceType, 'pending', 'Queued', item.lyricsText, item.lyricsType, int(item.fetchOriginalAudio), int(item.forceReprocess), item.reprocessComponent, '[]'))
     conn.commit()
     conn.close()
     
@@ -345,16 +366,17 @@ async def spawn_worker(task_id: str):
     await manager.broadcast({"action": "update", "id": task_id, "status": "processing", "statusText": "Starting worker..."})
     
     try:
-        # Run worker as a separate subprocess
-        process = await asyncio.create_subprocess_exec(
-            sys.executable, worker_script, "--task-id", task_id,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        stdout, stderr = await process.communicate()
+        loop = asyncio.get_running_loop()
+        def run_sync():
+            return subprocess.run(
+                [sys.executable, worker_script, "--task-id", task_id],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            )
+            
+        result = await loop.run_in_executor(None, run_sync)
         
-        if process.returncode != 0:
-            print(f"[Orchestrator] Worker failed for {task_id}. Stderr: {stderr.decode()}")
+        if result.returncode != 0:
+            print(f"[Orchestrator] Worker failed for {task_id}. Stderr: {result.stderr.decode()}")
             # If the worker completely crashed without sending a final status
             conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
@@ -365,6 +387,7 @@ async def spawn_worker(task_id: str):
             
     except Exception as e:
         print(f"[Orchestrator] Failed to spawn worker: {e}")
+        traceback.print_exc()
 
 if __name__ == '__main__':
     import uvicorn

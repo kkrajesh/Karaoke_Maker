@@ -24,7 +24,8 @@ def main():
     # Notify Orchestrator that task started
     def update_progress(msg):
         try:
-            requests.post(f"{base_url}/internal/queue/{task_id}/log", json={"message": msg}, timeout=2)
+            timestamped_msg = time.strftime("[%H:%M:%S] ") + msg
+            requests.post(f"{base_url}/internal/queue/{task_id}/log", json={"message": timestamped_msg}, timeout=2)
         except Exception as e:
             print(f"[WORKER ERROR] Failed to send progress update: {e}")
 
@@ -41,7 +42,7 @@ def main():
         # Clean up title for folder generation
         task_title = task.get("title", "")
         clean_title = task_title
-        clean_id = task.get("clean_id", "")
+        clean_id = task.get("cleanId", "")
         
         if task_title and not clean_title:
             try:
@@ -68,15 +69,15 @@ def main():
 
         # Setup parameters
         url = task.get("url")
-        lyrics_text = task.get("lyrics_text")
-        lyrics_type = task.get("lyrics_type", "txt")
+        lyrics_text = task.get("lyricsText")
+        lyrics_type = task.get("lyricsType", "txt")
         local_path = None
         
-        if task.get("source_type", "").lower() == "localdirectory":
+        if task.get("sourceType", "").lower() == "localdirectory":
             local_path = url
             url = None
             
-        if task.get("fetch_original_audio", False):
+        if task.get("fetchOriginalAudio", False):
             update_progress("Fetch original audio requested. Ignoring local file and searching web...")
             url = None
             local_path = None
@@ -89,6 +90,24 @@ def main():
             else:
                 update_progress(f"Failed to find web audio for {search_query}")
                 
+        # Determine what to reprocess
+        force_reprocess = task.get("forceReprocess", False)
+        component = task.get("reprocessComponent", "all")
+        
+        force_audio = False
+        force_lyrics = False
+        skip_audio = False
+        
+        force_redownload = False
+        
+        if force_reprocess:
+            if component in ['all', 'audio', 'redownload']: force_audio = True
+            if component in ['all', 'lyrics', 'redownload']: force_lyrics = True
+            if component == 'redownload': force_redownload = True
+            
+        if component == 'lyrics':
+            skip_audio = True
+
         # Execute processing
         success = maker.process_specific_song(
             song_id=song_id,
@@ -96,7 +115,11 @@ def main():
             local_audio_path=local_path,
             lyrics_text=lyrics_text,
             lyrics_type=lyrics_type,
-            progress_callback=update_progress
+            skip_audio=skip_audio,
+            progress_callback=update_progress,
+            force_reprocess_audio=force_audio,
+            force_reprocess_lyrics=force_lyrics,
+            force_redownload_audio=force_redownload
         )
         
         final_status = "done" if success else "failed"

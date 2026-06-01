@@ -280,70 +280,101 @@ class MakerService:
                 
         return True
 
-    def process_specific_song(self, song_id, url=None, local_audio_path=None, lyrics_text=None, lyrics_type="txt", target_dir_override=None, skip_audio=False, progress_callback=None):
+    def process_specific_song(self, song_id, url=None, local_audio_path=None, lyrics_text=None, lyrics_type="txt", target_dir_override=None, skip_audio=False, progress_callback=None, force_reprocess_audio=False, force_reprocess_lyrics=False, force_redownload_audio=False):
         """API workflow: Takes a specific source and lyrics, and processes them."""
+        import concurrent.futures
         target_dir = target_dir_override if target_dir_override else os.path.join(self.hot_zone, song_id)
         os.makedirs(target_dir, exist_ok=True)
         
         self.log(song_id, f"[INFO] Starting specific processing for {song_id}")
         
-        # 1. Process Lyrics
-        if progress_callback: progress_callback("Fetching Lyrics...")
-        try:
-            from core_engine.agents.lyric_agent import LyricAgent
-            agent = LyricAgent()
-            
-            def lyric_logger(msg):
-                self.log(song_id, msg)
-                if progress_callback:
-                    if msg.startswith("[WAIT] LyricAgent: "):
-                        progress_callback(msg.replace("[WAIT] LyricAgent: ", ""))
-                    elif msg.startswith("[INFO] LyricAgent: Detected language"):
-                        progress_callback(msg.replace("[INFO] LyricAgent: ", ""))
+        # Optional: Delete files if forced
+        if force_reprocess_lyrics:
+            self.log(song_id, "[INFO] Force Reprocess Lyrics is ON. Deleting existing lyric files...")
+            for f in ["lyrics.txt", "lyrics.lrc", "transliteration.json", "meaning.json", "meta.json"]:
+                p = os.path.join(target_dir, f)
+                if os.path.exists(p): os.remove(p)
                 
-            query = song_id.replace("_", " ")
-            agent.process_lyrics(
-                target_dir=target_dir,
-                query=query,
-                manual_lyrics=lyrics_text,
-                lyrics_type=lyrics_type,
-                log_callback=lyric_logger
-            )
-        except Exception as e:
-            self.log(song_id, f"[WARN] Failed to process lyrics: {e}")
+        if force_reprocess_audio:
+            self.log(song_id, "[INFO] Force Reprocess Audio is ON. Deleting generated stems...")
+            for f in ["final_vocals.wav", "instrumental.wav", "vocal_map.json", "pitch_analysis.json", "vocals.wav"]:
+                p = os.path.join(target_dir, f)
+                if os.path.exists(p): os.remove(p)
+                
+        if force_redownload_audio:
+            self.log(song_id, "[INFO] Force Redownload Audio is ON. Deleting original.wav...")
+            p = os.path.join(target_dir, "original.wav")
+            if os.path.exists(p): os.remove(p)
 
+        # 1. Start Lyrics Processing in Background Thread
+        def run_lyrics():
+            if progress_callback: progress_callback("Fetching Lyrics...")
+            try:
+                from core_engine.agents.lyric_agent import LyricAgent
+                agent = LyricAgent()
+                
+                def lyric_logger(msg):
+                    self.log(song_id, msg)
+                    if progress_callback:
+                        if msg.startswith("[WAIT] LyricAgent: "):
+                            progress_callback(msg.replace("[WAIT] LyricAgent: ", ""))
+                        elif msg.startswith("[INFO] LyricAgent: Detected language"):
+                            progress_callback(msg.replace("[INFO] LyricAgent: ", ""))
+                    
+                query = song_id.replace("_", " ")
+                agent.process_lyrics(
+                    target_dir=target_dir,
+                    query=query,
+                    manual_lyrics=lyrics_text,
+                    lyrics_type=lyrics_type,
+                    log_callback=lyric_logger
+                )
+            except Exception as e:
+                self.log(song_id, f"[WARN] Failed to process lyrics: {e}")
+                
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        lyrics_future = executor.submit(run_lyrics)
+
+        audio_success = True
         if skip_audio:
             self.log(song_id, "[INFO] Audio processing skipped (partial reprocess).")
-            return True
-
-        # 2. Acquire Audio
-        target_mp3 = os.path.join(target_dir, "original.wav")
-        actual_url = "Local File"
-        
-        if local_audio_path and os.path.exists(local_audio_path):
-            if os.path.abspath(local_audio_path) != os.path.abspath(target_mp3):
-                self.log(song_id, f"[INFO] Copying local audio file from {local_audio_path}")
-                shutil.copy2(local_audio_path, target_mp3)
-            else:
-                self.log(song_id, f"[INFO] Using existing local audio file {target_mp3}")
-            # Try to convert to wav if it's not already
-            if not local_audio_path.lower().endswith('.wav'):
-                temp_file = target_mp3 + ".temp"
-                shutil.move(target_mp3, temp_file)
-                cmd = [self.ffmpeg_path, "-y", "-i", temp_file, target_mp3]
-                subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                os.remove(temp_file)
-        elif url:
-            success, actual_url = self.download_audio(url, target_dir, song_id, progress_callback)
-            if not success:
-                self.log(song_id, "[ERROR] Failed to download audio from URL.")
-                return False
         else:
-            self.log(song_id, "[ERROR] Neither URL nor local_audio_path provided.")
-            return False
+            # 2. Acquire Audio
+            target_mp3 = os.path.join(target_dir, "original.wav")
+            actual_url = "Local File"
             
-        # 3. Separate Audio & Analyze
-        return self.separate_audio(song_id, actual_url, progress_callback)
+            if local_audio_path and os.path.exists(local_audio_path):
+                if os.path.abspath(local_audio_path) != os.path.abspath(target_mp3):
+                    self.log(song_id, f"[INFO] Copying local audio file from {local_audio_path}")
+                    shutil.copy2(local_audio_path, target_mp3)
+                else:
+                    self.log(song_id, f"[INFO] Using existing local audio file {target_mp3}")
+                if not local_audio_path.lower().endswith('.wav'):
+                    temp_file = target_mp3 + ".temp"
+                    shutil.move(target_mp3, temp_file)
+                    cmd = [self.ffmpeg_path, "-y", "-i", temp_file, target_mp3]
+                    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    os.remove(temp_file)
+            elif url:
+                if force_reprocess_audio or not os.path.exists(target_mp3):
+                    audio_success, actual_url = self.download_audio(url, target_dir, song_id, progress_callback)
+                else:
+                    self.log(song_id, f"[INFO] Audio {target_mp3} exists, skipping download.")
+                    audio_success = True
+            else:
+                self.log(song_id, "[ERROR] Neither URL nor local_audio_path provided.")
+                audio_success = False
+                
+            # 3. Separate Audio & Analyze
+            if audio_success:
+                audio_success = self.separate_audio(song_id, actual_url, progress_callback)
+
+        # 4. Wait for lyrics processing to finish
+        if progress_callback: progress_callback("Waiting for lyrics processing to finalize...")
+        lyrics_future.result()
+        executor.shutdown()
+        
+        return audio_success
 
     def process_song(self, song_query, force_reprocess=False):
         """Main workflow: Search -> Download -> Separate."""

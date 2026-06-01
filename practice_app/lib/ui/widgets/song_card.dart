@@ -80,30 +80,44 @@ class SongCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  if (song.isMissing)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (onReprocess != null)
-                          IconButton(
-                            icon: const Icon(Icons.refresh, color: Colors.amberAccent, size: 20),
-                            onPressed: () => onReprocess!(context, song.id, 'Full Song', 'all'),
-                            tooltip: 'Reprocess Missing Song',
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                          ),
-                        if (onReprocess != null && onRemove != null)
-                          const SizedBox(width: 12),
-                        if (onRemove != null)
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
-                            onPressed: onRemove,
-                            tooltip: 'Remove from Database',
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                          ),
-                      ],
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (onReprocess != null)
+                        PopupMenuButton<String>(
+                          icon: const Icon(Icons.refresh, color: Colors.amberAccent, size: 20),
+                          tooltip: 'Reprocess Options',
+                          padding: EdgeInsets.zero,
+                          onSelected: (value) {
+                            if (value == 'all') {
+                              onReprocess!(context, song.id, 'Full Song', 'all');
+                            } else if (value == 'redownload') {
+                              onReprocess!(context, song.id, 'Full Re-download', 'redownload');
+                            } else if (value == 'lyrics') {
+                              onReprocess!(context, song.id, 'Lyrics', 'lyrics');
+                            } else if (value == 'audio') {
+                              onReprocess!(context, song.id, 'Audio (Demucs)', 'audio');
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(value: 'all', child: Text('Reprocess Full Song')),
+                            const PopupMenuItem(value: 'redownload', child: Text('Reprocess Entirely (Re-download Audio)')),
+                            const PopupMenuItem(value: 'lyrics', child: Text('Reprocess Lyrics Only')),
+                            const PopupMenuItem(value: 'audio', child: Text('Reprocess Audio Only')),
+                          ],
+                        ),
+                      if (onReprocess != null && song.isMissing && onRemove != null)
+                        const SizedBox(width: 12),
+                      if (song.isMissing && onRemove != null)
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                          onPressed: onRemove,
+                          tooltip: 'Remove from Database',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                    ],
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
