@@ -59,6 +59,15 @@ def get_preferred_domains():
         print("[INFO] No Preferred Audio Domains specified. Will default to YouTube.")
         return []
 
+def get_mm_db_path():
+    path = os.getenv("MM_DB_PATH", r"C:\Data\Rajesh\Dev\data\MM.DB")
+    if os.path.exists(path):
+        print(f"[OK] MediaMonkey DB found at: {path}")
+        return path
+    else:
+        print(f"[WARNING] MediaMonkey DB NOT found at: {path}")
+        return path
+
 def verify_llm_connectivity():
     llm_base_url = os.getenv("LLM_BASE_URL")
     if not llm_base_url:

@@ -23,6 +23,7 @@ load_dotenv(dotenv_path=env_path)
 
 from core_engine.maker_service import MakerService
 from core_engine.agents.lyric_agent import LyricAgent
+from core_engine.config import get_mm_db_path
 
 maker = MakerService()
 lyric_agent = LyricAgent()
@@ -177,6 +178,93 @@ def search(q: str):
         return {"results": results}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/local-search")
+def local_search(q: str):
+    try:
+        mm_db_path = get_mm_db_path()
+        if not os.path.exists(mm_db_path):
+            return []
+            
+        conn = sqlite3.connect(mm_db_path)
+        # Register dummy collations just in case
+        conn.create_collation("IUNICODE", lambda a, b: 0)
+        conn.create_collation("NUMERIC", lambda a, b: 0)
+        
+        c = conn.cursor()
+        
+        words = [w for w in q.strip().split() if w]
+        if not words:
+            return []
+            
+        where_clauses = []
+        params = []
+        for word in words:
+            where_clauses.append('(s.SongTitle LIKE ? OR s.Artist LIKE ? OR a.Album LIKE ?)')
+            pattern = f'%{word}%'
+            params.extend([pattern, pattern, pattern])
+            
+        where_sql = " AND ".join(where_clauses)
+        
+        sql = f'''
+            SELECT s.ID, s.Artist, s.SongTitle, s.SongPath, s.Extension, m.DriveLetter,
+                   s.SongLength, s.Bitrate, a.Album
+            FROM Songs s
+            LEFT JOIN Medias m ON s.IDMedia = m.IDMedia
+            LEFT JOIN Albums a ON s.IDAlbum = a.ID
+            WHERE {where_sql}
+              AND (s.Extension IS NULL OR s.Extension = '' OR LOWER(s.Extension) IN ('mp4', 'mkv', 'avi', 'mp3', 'wav', 'm4a', 'flac'))
+            LIMIT 50
+        '''
+        
+        c.execute(sql, params)
+        rows = c.fetchall()
+        
+        results = []
+        for row in rows:
+            song_id = str(row[0]) if row[0] is not None else ''
+            artist = row[1] if row[1] else 'Unknown Artist'
+            title = row[2] if row[2] else 'Unknown Title'
+            song_path = row[3] if row[3] else ''
+            drive_letter_num = row[5]
+            song_length = row[6]
+            bitrate = row[7]
+            album = row[8]
+            
+            full_path = song_path
+            if drive_letter_num is not None and song_path.startswith(':\\'):
+                drive_char = chr(drive_letter_num + 65)
+                full_path = f"{drive_char}{song_path}"
+                
+            metadata = {}
+            if album: metadata['album'] = album
+            if bitrate:
+                if bitrate > 1000: metadata['bitrate'] = round(bitrate / 1000)
+                elif bitrate > 0: metadata['bitrate'] = bitrate
+                
+            has_ai_content = False
+            # Check if exists in AI_VAULT
+            target_dir = os.path.join(AI_VAULT, song_id)
+            if os.path.exists(target_dir):
+                has_ai_content = True
+                
+            results.append({
+                "id": song_id,
+                "title": title,
+                "artist": artist,
+                "url": full_path,
+                "previewUrl": full_path,
+                "durationMs": song_length,
+                "metadata": metadata,
+                "mmId": song_id,
+                "hasAiContent": has_ai_content
+            })
+            
+        conn.close()
+        return results
+    except Exception as e:
+        print(f"Error in local-search: {e}")
+        return []
 
 @app.get("/lyrics")
 def fetch_lyrics(q: str):
@@ -392,4 +480,4 @@ async def spawn_worker(task_id: str):
 if __name__ == '__main__':
     import uvicorn
     print("Starting Karaoke Orchestrator on port 5000...")
-    uvicorn.run("karaoke_orchestrator:app", host='127.0.0.1', port=5000, reload=True)
+    uvicorn.run("karaoke_orchestrator:app", host='0.0.0.0', port=5000, reload=True)
