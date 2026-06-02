@@ -2,6 +2,10 @@
 
 Karaoke Maker is an automated pipeline designed to search, download, and process high-fidelity audio tracks to generate clean instrumental and vocal stems. It includes a Python Backend for audio separation/LLM analysis, and a Flutter Practice App frontend.
 
+## 🚀 Release Notes (v1.4.1)
+- **Local Search API**: Exposed a proxy `/local-search` endpoint on the Orchestrator to securely relay MediaMonkey search queries to remote clients (like Web and Android) over the local network.
+- **Network Binding**: Reconfigured `karaoke_orchestrator.py` `uvicorn` instance to bind to `0.0.0.0` instead of `127.0.0.1`, enabling cross-device connectivity.
+
 ## 🚀 Release Notes (v1.4.0)
 - **FastAPI Migration**: Refactored the core engine from a multi-process Flask/Worker architecture to a unified `karaoke_orchestrator.py` FastAPI server.
 - **WebSocket Hub**: Eliminated file-system polling in favor of high-performance WebSockets for active AI Queue management.
