@@ -2,6 +2,10 @@
 
 Karaoke Maker is an automated pipeline designed to search, download, and process high-fidelity audio tracks to generate clean instrumental and vocal stems. It includes a Python Backend for audio separation/LLM analysis, and a Flutter Practice App frontend.
 
+## 🚀 Release Notes (v1.5.4)
+- **Sequence Editor Upgrades**: Integrated `vox_player_core` v0.4.2 improvements into the Practice App. The sequence editor now includes a top-bar dropdown for switching between sequences.
+- **Unsaved Changes Prompt**: Prevented accidental data loss by prompting users before switching sequences if they have pending edits.
+
 ## 🚀 Release Notes (v1.4.2)
 - **Adaptive Icons**: Re-generated proper Android 8.0+ Adaptive Icons for the Practice App, utilizing `flutter_launcher_icons` foreground/background logic to eliminate the default Flutter icon fallback on Android devices.
 
