@@ -8,8 +8,6 @@ import 'package:vox_player_core/vox_player_core.dart';
 import '../../services/settings_service.dart';
 import 'package:provider/provider.dart';
 import '../../services/file_explorer_service.dart';
-import 'package:vox_player_core/src/api/vox_api_service.dart';
-
 class ActiveSessionScreen extends StatefulWidget {
   final Song? selectedSong;
   final Function(Song)? onSongSwitched;
@@ -242,6 +240,21 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                       return Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          if (widget.selectedSong!.id.startsWith('UNKNOWN_'))
+                            ElevatedButton.icon(
+                              icon: const Icon(Icons.link, size: 16),
+                              label: const Text('Link to MediaMonkey'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.orange,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              ),
+                              onPressed: () {
+                                _showLinkDialog(context, widget.selectedSong!);
+                              },
+                            ),
+                          if (widget.selectedSong!.id.startsWith('UNKNOWN_'))
+                            const SizedBox(width: 8),
                           ElevatedButton.icon(
                             icon: const Icon(Icons.music_note, size: 16),
                             label: const Text('Gen MP3s'),
@@ -342,6 +355,109 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  void _showLinkDialog(BuildContext context, Song song) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return Dialog(
+          backgroundColor: VoxProTheme.cardBg,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Container(
+            width: 800,
+            height: 600,
+            padding: const EdgeInsets.all(16),
+            child: UnifiedSearchUI(
+              initialQuery: song.title,
+              providers: [MediaMonkeySearchProvider(prioritizeLocal: true)],
+              actionBuilder: (ctx, result) {
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: VoxProTheme.vocalAccent),
+                      onPressed: () async {
+                        Navigator.pop(dialogContext); // close dialog
+                        try {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Linking "${song.title}" to MediaMonkey...')),
+                          );
+                          await VoxApiService.linkMediaMonkey(
+                            oldId: song.id,
+                            newMmId: result.id,
+                            cleanTitle: song.title,
+                          );
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Successfully linked! Please refresh your library.')),
+                            );
+                            Provider.of<FileExplorerService>(context, listen: false).scanDirectory();
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red),
+                            );
+                          }
+                        }
+                      },
+                      child: const Text('Link This Song'),
+                    ),
+                  ],
+                );
+              },
+              onAddNotFound: () async {
+                Navigator.pop(dialogContext);
+                showDialog(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Add to MediaMonkey'),
+                    content: const Text(
+                      'Please ensure MediaMonkey is OPEN before clicking Proceed. '
+                      'This will instruct MediaMonkey to add this song to your library via the COM API.'
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          Navigator.pop(ctx);
+                          try {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Adding "${song.title}" to MediaMonkey...')),
+                            );
+                            await VoxApiService.addMediaMonkey(
+                              oldId: song.id,
+                              cleanTitle: song.title,
+                            );
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Successfully added and linked! Please refresh.')),
+                              );
+                              Provider.of<FileExplorerService>(context, listen: false).scanDirectory();
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red, duration: const Duration(seconds: 10)),
+                              );
+                            }
+                          }
+                        },
+                        child: const Text('Proceed'),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 }

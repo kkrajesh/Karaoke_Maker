@@ -37,6 +37,7 @@ def init_db():
         os.makedirs(AI_VAULT, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
+    c.execute('PRAGMA journal_mode=WAL;')
     c.execute('''
         CREATE TABLE IF NOT EXISTS queue_items (
             id TEXT PRIMARY KEY,
@@ -104,8 +105,10 @@ async def lifespan(app: FastAPI):
     # Startup
     init_db()
     print("[Orchestrator] Started. Database initialized.")
+    watcher_task = asyncio.create_task(cloud_queue_watcher())
     yield
     # Shutdown
+    watcher_task.cancel()
     print("[Orchestrator] Shutting down.")
 
 app = FastAPI(lifespan=lifespan)
@@ -298,8 +301,7 @@ def get_queue_item(task_id: str):
     conn.close()
     return item
 
-@app.post("/queue")
-async def add_to_queue(item: QueueItemCreate, background_tasks: BackgroundTasks):
+async def enqueue_task_internal(item: QueueItemCreate):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     
@@ -309,8 +311,7 @@ async def add_to_queue(item: QueueItemCreate, background_tasks: BackgroundTasks)
     if row:
         status = row[0]
         if status in ['pending', 'processing', 'done']:
-            conn.close()
-            return {"message": "Item already in queue", "id": item.id}
+            return None
         else:
             c.execute('DELETE FROM queue_items WHERE id = ?', (item.id,))
             
@@ -321,16 +322,67 @@ async def add_to_queue(item: QueueItemCreate, background_tasks: BackgroundTasks)
     conn.commit()
     conn.close()
     
-    # Broadcast new item
     await manager.broadcast({"action": "add", "item": {
         "id": item.id, "title": item.title, "artist": item.artist, "url": item.url, 
         "sourceType": item.sourceType, "status": "pending", "statusText": "Queued",
         "fetchOriginalAudio": item.fetchOriginalAudio, "logs": []
     }})
-    
-    # Schedule the worker process
-    background_tasks.add_task(spawn_worker, item.id)
-    return {"message": "Added to queue", "id": item.id}
+    return item.id
+
+@app.post("/queue")
+async def add_to_queue(item: QueueItemCreate, background_tasks: BackgroundTasks):
+    task_id = await enqueue_task_internal(item)
+    if task_id:
+        background_tasks.add_task(spawn_worker, task_id)
+        return {"message": "Added to queue", "id": task_id}
+    return {"message": "Item already in queue", "id": item.id}
+
+CLOUD_QUEUE_PATH = os.path.join(AI_VAULT, "ai_task_queue.jsonl")
+
+async def cloud_queue_watcher():
+    print(f"[CloudQueue] Watching {CLOUD_QUEUE_PATH} for offline tasks...")
+    last_processed_line = 0
+    if os.path.exists(CLOUD_QUEUE_PATH):
+        try:
+            with open(CLOUD_QUEUE_PATH, 'r', encoding='utf-8') as f:
+                last_processed_line = sum(1 for _ in f)
+        except Exception:
+            pass
+            
+    while True:
+        try:
+            if os.path.exists(CLOUD_QUEUE_PATH):
+                with open(CLOUD_QUEUE_PATH, 'r', encoding='utf-8') as f:
+                    lines = f.readlines()
+                    if len(lines) > last_processed_line:
+                        for idx in range(last_processed_line, len(lines)):
+                            line = lines[idx].strip()
+                            if not line: continue
+                            try:
+                                data = json.loads(line)
+                                item = QueueItemCreate(**data)
+                                
+                                # Verify if already in DB to prevent duplicate processing on restart edge cases
+                                conn = sqlite3.connect(DB_PATH)
+                                c = conn.cursor()
+                                c.execute('SELECT id FROM queue_items WHERE id = ?', (item.id,))
+                                row = c.fetchone()
+                                conn.close()
+                                
+                                if not row:
+                                    print(f"[CloudQueue] Found new task from cloud: {item.title}")
+                                    task_id = await enqueue_task_internal(item)
+                                    if task_id:
+                                        asyncio.create_task(spawn_worker(task_id))
+                            except Exception as e:
+                                print(f"[CloudQueue] Failed to process line {idx}: {e}")
+                        last_processed_line = len(lines)
+        except Exception as e:
+            print(f"[CloudQueue] Error watching file: {e}")
+            
+        await asyncio.sleep(5)
+        
+    # Broadcast new item
 
 @app.delete("/queue/completed")
 async def clear_completed():
@@ -383,11 +435,6 @@ async def update_log(task_id: str, request: Request):
         
     logs = json.loads(row[0]) if row[0] else []
     
-    # Format with elapsed time from when processing started
-    # We'll just prepend timestamp directly here or let worker do it.
-    # Worker is doing it, or we can do it here if we store start_time. 
-    # Actually, let's just use the message as is, worker can format it.
-    
     logs.append(msg)
     status = "processing" if row[1] == "pending" else row[1]
     
@@ -399,8 +446,91 @@ async def update_log(task_id: str, request: Request):
     await manager.broadcast({"action": "update", "id": task_id, "statusText": msg, "log": msg, "status": status})
     return {"message": "Log updated"}
 
+import shutil
+import re
+
+def sanitize_title(title: str) -> str:
+    return re.sub(r'[\\/:*?"<>|]', '', title)
+
+def finalize_artifact(task_id: str):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('SELECT title, clean_title, clean_id FROM queue_items WHERE id = ?', (task_id,))
+    row = c.fetchone()
+    if not row:
+        conn.close()
+        return
+        
+    title, clean_title, clean_id = row
+    
+    # Use clean_title if available, otherwise fallback to raw title
+    final_title = clean_title if clean_title else title
+    clean_title_str = sanitize_title(final_title)
+    
+    # Locate HotZone source
+    AI_HOTZONE = os.getenv("AI_HOTZONE", "C:/Data/Rajesh/Karaoke_HotZone")
+    source_dir = os.path.join(AI_HOTZONE, task_id)
+    if not os.path.exists(source_dir) and clean_id:
+        source_dir = os.path.join(AI_HOTZONE, clean_id)
+    if not os.path.exists(source_dir) and clean_title:
+        source_dir = os.path.join(AI_HOTZONE, clean_title)
+        
+    if not os.path.exists(source_dir):
+        print(f"[Finalize] Could not find HotZone files for {task_id}")
+        conn.close()
+        return
+        
+    # Determine Vault Path
+    if task_id == clean_title_str or task_id == final_title:
+        folder_name = task_id
+        prefix = task_id
+    else:
+        folder_name = f"{task_id}_{clean_title_str}"
+        prefix = f"{task_id}_{clean_title_str}"
+        
+    vault_dir = os.path.join(AI_VAULT, folder_name)
+    os.makedirs(vault_dir, exist_ok=True)
+    
+    has_inst = has_voc = has_pitch = has_map = has_lyr = 0
+    
+    # Move files
+    try:
+        for filename in os.listdir(source_dir):
+            src = os.path.join(source_dir, filename)
+            if os.path.isfile(src):
+                new_filename = filename if filename.startswith(f"{task_id}_") else f"{task_id}_{filename}"
+                # If using the strict prefix:
+                if not filename.startswith(prefix):
+                    new_filename = f"{prefix}_{filename}"
+                else:
+                    new_filename = filename
+                
+                shutil.copy2(src, os.path.join(vault_dir, new_filename))
+                
+                if "instrumental.wav" in filename: has_inst = 1
+                if "vocals.wav" in filename: has_voc = 1
+                if "pitch_profile.json" in filename: has_pitch = 1
+                if "vocal_map.json" in filename: has_map = 1
+                if "lyrics_native" in filename or "lyrics_english" in filename: has_lyr = 1
+                
+        # Insert artifact tracking
+        c.execute('''
+            INSERT OR REPLACE INTO ai_artifacts 
+            (mm_id, title, has_vocals, has_instrumental, has_pitch_data, has_vocal_map, has_lyrics, last_processed)
+            VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ''', (task_id, final_title, has_voc, has_inst, has_pitch, has_map, has_lyr))
+        conn.commit()
+        
+        # Cleanup HotZone
+        shutil.rmtree(source_dir, ignore_errors=True)
+        print(f"[Finalize] Task {task_id} migrated to AI_Vault successfully.")
+    except Exception as e:
+        print(f"[Finalize] Error during migration: {e}")
+        
+    conn.close()
+
 @app.post("/internal/queue/{task_id}/status")
-async def update_status(task_id: str, request: Request):
+async def update_status(task_id: str, request: Request, background_tasks: BackgroundTasks):
     data = await request.json()
     status = data.get("status")
     status_text = data.get("status_text")
@@ -412,6 +542,9 @@ async def update_status(task_id: str, request: Request):
     conn.commit()
     conn.close()
     
+    if status == "done":
+        background_tasks.add_task(finalize_artifact, task_id)
+        
     await manager.broadcast({"action": "update", "id": task_id, "status": status, "statusText": status_text})
     return {"message": "Status updated"}
 
@@ -428,6 +561,136 @@ async def patch_queue(task_id: str, request: Request):
     conn.commit()
     conn.close()
     return {"message": "Patched"}
+
+class LinkRequest(BaseModel):
+    old_id: str
+    new_mm_id: str
+    clean_title: str
+
+@app.post("/internal/link_mm")
+async def link_mm(req: LinkRequest):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    
+    # Check if the old ID exists in ai_artifacts
+    c.execute('SELECT * FROM ai_artifacts WHERE mm_id = ?', (req.old_id,))
+    row = c.fetchone()
+    
+    if not row:
+        # Check if we already updated the DB in a previous failed run
+        c.execute('SELECT * FROM ai_artifacts WHERE mm_id = ?', (req.new_mm_id,))
+        already_updated = c.fetchone()
+        if not already_updated:
+            conn.close()
+            raise HTTPException(status_code=404, detail="Artifact not found")
+    else:
+        # Update ai_artifacts to the new MM ID
+        c.execute('UPDATE ai_artifacts SET mm_id = ? WHERE mm_id = ?', (req.new_mm_id, req.old_id))
+        
+        # Update queue_items just in case
+        c.execute('UPDATE queue_items SET id = ? WHERE id = ?', (req.new_mm_id, req.old_id))
+        conn.commit()
+    
+    conn.close()
+    
+    # Rename folder in Vault
+    vault = os.getenv("AI_VAULT", r"E:\Data\Rajesh\MyMusic\Music_AI_Vault")
+    
+    # Find existing old folder
+    old_folder = None
+    for d in os.listdir(vault):
+        if d.startswith(req.old_id):
+            old_folder = os.path.join(vault, d)
+            break
+            
+    if old_folder and os.path.isdir(old_folder):
+        def sanitize_title(t): return re.sub(r'[\\/:*?"<>|]', '', t)
+        clean_title_str = sanitize_title(req.clean_title)
+        
+        # New folder path
+        new_folder_name = req.new_mm_id if req.new_mm_id == clean_title_str else f"{req.new_mm_id}_{clean_title_str}"
+        new_folder = os.path.join(vault, new_folder_name)
+        
+        # Rename and move files to new folder
+        prefix = new_folder_name
+        os.makedirs(new_folder, exist_ok=True)
+        for f in os.listdir(old_folder):
+            if f.endswith('.wav') or f.endswith('.json') or f.endswith('.txt') or f.endswith('.log'):
+                parts = f.rsplit('_', 1)
+                
+                # Extract suffix reliably
+                if f.endswith('pitch_profile.json'): suffix = 'pitch_profile.json'
+                elif f.endswith('vocal_map.json'): suffix = 'vocal_map.json'
+                elif f.endswith('lyrics_english.txt'): suffix = 'lyrics_english.txt'
+                elif f.endswith('lyrics_native.txt'): suffix = 'lyrics_native.txt'
+                elif f.endswith('lyrics_meaning.txt'): suffix = 'lyrics_meaning.txt'
+                else: suffix = parts[-1]
+                
+                new_f = f'{prefix}_{suffix}'
+                # Try to move file to new folder
+                import shutil
+                try:
+                    shutil.move(os.path.join(old_folder, f), os.path.join(new_folder, new_f))
+                except PermissionError:
+                    # If locked, try to wait briefly
+                    time.sleep(1.0)
+                    try:
+                        shutil.move(os.path.join(old_folder, f), os.path.join(new_folder, new_f))
+                    except Exception as e:
+                        print(f"Failed to move {f}: {e}")
+        
+        # Try to remove old folder, it might be locked by MM file monitor
+        try:
+            import time
+            time.sleep(0.5)
+            shutil.rmtree(old_folder, ignore_errors=True)
+        except Exception as e:
+            print(f"Could not remove old folder {old_folder}: {e}")
+        
+    return {"message": "Linked successfully"}
+
+@app.post("/internal/add_to_mm")
+async def add_to_mm(req: LinkRequest):
+    # For Add to MM, we try to use win32com
+    vault = os.getenv("AI_VAULT", r"E:\Data\Rajesh\MyMusic\Music_AI_Vault")
+    def sanitize_title(t): return re.sub(r'[\\/:*?"<>|]', '', t)
+    
+    # Path to original.wav (or vocals) to add to MM
+    old_folder = None
+    for d in os.listdir(vault):
+        if d.startswith(req.old_id):
+            old_folder = os.path.join(vault, d)
+            break
+            
+    if not old_folder:
+        raise HTTPException(status_code=404, detail="Artifact folder not found in Vault")
+        
+    # We add the original.wav to MM
+    target_file = None
+    for f in os.listdir(old_folder):
+        if 'original.wav' in f or 'vocals.wav' in f:
+            target_file = os.path.join(old_folder, f)
+            if 'original' in f: break
+            
+    if not target_file:
+        raise HTTPException(status_code=404, detail="No audio file found to add to MM")
+        
+    try:
+        import win32com.client
+        sdb = win32com.client.Dispatch("SongsDB.SDBApplication")
+        song = sdb.NewSongData
+        song.Path = target_file
+        song.Title = req.clean_title
+        song.UpdateDB()
+        song.UpdateAll()
+        new_mm_id = str(song.SongID)
+        
+        # Now call link_mm internally
+        req.new_mm_id = new_mm_id
+        await link_mm(req)
+        return {"message": "Added to MediaMonkey", "new_mm_id": new_mm_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"MediaMonkey COM API error. Please ensure MM is running and COM is registered. Details: {e}")
 
 # ---- WebSocket Endpoint ----
 @app.websocket("/ws/updates")
