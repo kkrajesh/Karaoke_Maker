@@ -265,6 +265,27 @@ Lyrics:
             self.log(f"[WARN] LLM Poetic translation failed: {e}")
             return None
 
+    def ask_llm_for_lyrics(self, query):
+        """Asks the LLM to recall the lyrics from its training data as a last resort."""
+        prompt = f"""
+You are an expert in song lyrics. Please provide the full original lyrics for the song "{query}".
+Output ONLY the pure lyrics. Do not add any introductory or concluding remarks.
+If you don't know the lyrics, output exactly: "I DO NOT KNOW THE LYRICS."
+"""
+        try:
+            response = self.llm_client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3
+            )
+            content = response.choices[0].message.content.strip()
+            if "I DO NOT KNOW THE LYRICS" in content.upper() or len(content) < 50:
+                return None
+            return content
+        except Exception as e:
+            self.log(f"[WARN] LLM Lyrics Recall failed: {e}")
+            return None
+
     def search_youtube_lyrics(self, query):
         """Search YouTube for lyric videos and extract their descriptions."""
         import yt_dlp
@@ -344,6 +365,13 @@ Lyrics:
                 self.log(f"[WARN] Extracted lyrics were too short or empty: {len(eng_lyrics) if eng_lyrics else 0} chars.")
         else:
             self.log("[WARN] Raw text was still empty or too short after all fallbacks.")
+            
+        # LAST RESORT: Ask LLM directly
+        self.log(f"[WAIT] Asking LLM to recall lyrics for '{clean_query}' from memory...")
+        llm_recalled_lyrics = self.ask_llm_for_lyrics(clean_query)
+        if llm_recalled_lyrics:
+            self.log("[OK] LLM successfully recalled lyrics from memory.")
+            return {"text": llm_recalled_lyrics, "type": "txt", "source": "LLM Recalled"}
 
         return {"text": "", "type": "txt", "source": "None"}
 

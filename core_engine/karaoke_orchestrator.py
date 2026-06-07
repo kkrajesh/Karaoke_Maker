@@ -37,7 +37,7 @@ def init_db():
         os.makedirs(AI_VAULT, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('PRAGMA journal_mode=WAL;')
+    c.execute('PRAGMA journal_mode=DELETE;')
     c.execute('''
         CREATE TABLE IF NOT EXISTS queue_items (
             id TEXT PRIMARY KEY,
@@ -342,13 +342,7 @@ CLOUD_QUEUE_PATH = os.path.join(AI_VAULT, "ai_task_queue.jsonl")
 async def cloud_queue_watcher():
     print(f"[CloudQueue] Watching {CLOUD_QUEUE_PATH} for offline tasks...")
     last_processed_line = 0
-    if os.path.exists(CLOUD_QUEUE_PATH):
-        try:
-            with open(CLOUD_QUEUE_PATH, 'r', encoding='utf-8') as f:
-                last_processed_line = sum(1 for _ in f)
-        except Exception:
-            pass
-            
+    # We intentionally start from line 0. Any tasks already processed are safely skipped by the DB check below.
     while True:
         try:
             if os.path.exists(CLOUD_QUEUE_PATH):

@@ -242,7 +242,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             padding: const EdgeInsets.all(16),
             child: UnifiedSearchUI(
               providers: [
-                YoutubeSearchProvider(),
+                DartYouTubeSearchProvider(),
                 MediaMonkeySearchProvider(prioritizeLocal: true),
               ],
               actionBuilder: (context, result) {

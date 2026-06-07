@@ -34,7 +34,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late TextEditingController _winRootController;
   late TextEditingController _andRootController;
   late TextEditingController _engineController;
+  late TextEditingController _orchestratorUrlController;
+  late TextEditingController _machineNameController;
   late bool _prioritizeLocalSearch;
+  List<String> _availableProfiles = [];
+  String? _selectedProfileToClone;
   late double _micLatency;
 
   @override
@@ -47,8 +51,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _winRootController = TextEditingController(text: VoxSettingsService.instance.windowsMusicRoot);
     _andRootController = TextEditingController(text: VoxSettingsService.instance.androidMusicRoot);
     _engineController = TextEditingController(text: VoxSettingsService.instance.karaokeMakerEnginePath);
+    _orchestratorUrlController = TextEditingController(text: VoxSettingsService.instance.orchestratorUrl);
+    _machineNameController = TextEditingController(text: VoxSettingsService.instance.machineName);
     _prioritizeLocalSearch = VoxSettingsService.instance.prioritizeLocalSearch;
     _micLatency = VoxSettingsService.instance.micLatencyOffset.toDouble();
+    _loadAvailableProfiles();
     
     // In case we opened this screen very fast, wait for settings to finish loading then update UI
     VoxSettingsService.instance.initFuture.then((_) {
@@ -61,11 +68,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _winRootController.text = VoxSettingsService.instance.windowsMusicRoot;
           _andRootController.text = VoxSettingsService.instance.androidMusicRoot;
           _engineController.text = VoxSettingsService.instance.karaokeMakerEnginePath;
+          _orchestratorUrlController.text = VoxSettingsService.instance.orchestratorUrl;
+          _machineNameController.text = VoxSettingsService.instance.machineName;
           _prioritizeLocalSearch = VoxSettingsService.instance.prioritizeLocalSearch;
           _micLatency = VoxSettingsService.instance.micLatencyOffset.toDouble();
         });
+        _loadAvailableProfiles();
       }
     });
+  }
+
+  Future<void> _loadAvailableProfiles() async {
+    final profiles = await VoxSettingsService.instance.getAvailableProfiles();
+    if (mounted) {
+      setState(() {
+        _availableProfiles = profiles;
+        if (_selectedProfileToClone != null && !_availableProfiles.contains(_selectedProfileToClone)) {
+          _selectedProfileToClone = null;
+        }
+      });
+    }
   }
 
   @override
@@ -77,6 +99,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _winRootController.dispose();
     _andRootController.dispose();
     _engineController.dispose();
+    _orchestratorUrlController.dispose();
+    _machineNameController.dispose();
     super.dispose();
   }
 
@@ -93,6 +117,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await _promptToMoveContents(oldHotZone, newHotZone, 'AI HotZone');
     }
 
+    try {
+      await VoxSettingsService.instance.setMachineName(_machineNameController.text);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.toString().replaceAll('Exception: ', '')),
+          backgroundColor: Colors.redAccent,
+        ));
+      }
+      return;
+    }
+
     await VoxSettingsService.instance.setAiVaultPath(newVault);
     await VoxSettingsService.instance.setAiHotZonePath(newHotZone);
     await VoxSettingsService.instance.setMediaMonkeyDbPath(_dbController.text);
@@ -100,6 +136,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await VoxSettingsService.instance.setWindowsMusicRoot(_winRootController.text);
     await VoxSettingsService.instance.setAndroidMusicRoot(_andRootController.text);
     await VoxSettingsService.instance.setKaraokeMakerEnginePath(_engineController.text);
+    await VoxSettingsService.instance.setOrchestratorUrl(_orchestratorUrlController.text);
     await VoxSettingsService.instance.setPrioritizeLocalSearch(_prioritizeLocalSearch);
     await VoxSettingsService.instance.setMicLatencyOffset(_micLatency.toInt());
     
@@ -263,15 +300,79 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const SizedBox(height: 8),
-                          const Text('MediaMonkey Database (MM.DB)', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                          const Text('Machine Name (For AI Vault Sync)', style: TextStyle(color: Colors.white70, fontSize: 12)),
                           const SizedBox(height: 4),
-                          _buildPathSelector(
-                            controller: _dbController,
-                            onPathSelected: (p) => _dbController.text = p,
-                            isDirectory: false,
-                            allowedExtensions: ['db', 'DB'],
+                          TextField(
+                            controller: _machineNameController,
+                            style: const TextStyle(color: Colors.white, fontSize: 14),
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              filled: true,
+                              fillColor: Colors.black45,
+                              border: OutlineInputBorder(),
+                            ),
                           ),
+                          if (_availableProfiles.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            const Text('Clone Settings From Profile', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: DropdownButtonFormField<String>(
+                                    value: _selectedProfileToClone,
+                                    dropdownColor: Colors.black87,
+                                    hint: const Text('Select a profile...', style: TextStyle(color: Colors.white54)),
+                                    items: _availableProfiles.map((p) => DropdownMenuItem(value: p, child: Text(p, style: const TextStyle(color: Colors.white)))).toList(),
+                                    onChanged: (val) => setState(() => _selectedProfileToClone = val),
+                                    decoration: const InputDecoration(
+                                      isDense: true,
+                                      filled: true,
+                                      fillColor: Colors.black45,
+                                      border: OutlineInputBorder(),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                ElevatedButton(
+                                  onPressed: _selectedProfileToClone == null ? null : () async {
+                                    await VoxSettingsService.instance.cloneSettingsFromProfile(_selectedProfileToClone!);
+                                    setState(() {
+                                      _vaultController.text = VoxSettingsService.instance.aiVaultPath;
+                                      _hotZoneController.text = VoxSettingsService.instance.aiHotZonePath;
+                                      _dbController.text = VoxSettingsService.instance.mediaMonkeyDbPath;
+                                      _andMmdbController.text = VoxSettingsService.instance.androidMmdbPath;
+                                      _winRootController.text = VoxSettingsService.instance.windowsMusicRoot;
+                                      _andRootController.text = VoxSettingsService.instance.androidMusicRoot;
+                                      _engineController.text = VoxSettingsService.instance.karaokeMakerEnginePath;
+                                      _orchestratorUrlController.text = VoxSettingsService.instance.orchestratorUrl;
+                                      _prioritizeLocalSearch = VoxSettingsService.instance.prioritizeLocalSearch;
+                                      _micLatency = VoxSettingsService.instance.micLatencyOffset.toDouble();
+                                    });
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Settings cloned successfully!')));
+                                    }
+                                  },
+                                  style: ElevatedButton.styleFrom(backgroundColor: VoxProTheme.accent, foregroundColor: Colors.black),
+                                  child: const Text('Clone'),
+                                )
+                              ]
+                            ),
+                          ],
                           const SizedBox(height: 16),
+                          const Divider(color: Colors.white24),
+                          const SizedBox(height: 16),
+                          if (!Platform.isAndroid) ...[
+                            const Text('MediaMonkey Database (MM.DB)', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                            const SizedBox(height: 4),
+                            _buildPathSelector(
+                              controller: _dbController,
+                              onPathSelected: (p) => _dbController.text = p,
+                              isDirectory: false,
+                              allowedExtensions: ['db', 'DB'],
+                            ),
+                            const SizedBox(height: 16),
+                          ],
                           const Text('Android MediaMonkey DB (MM.DB)', style: TextStyle(color: Colors.white70, fontSize: 12)),
                           const SizedBox(height: 4),
                           _buildPathSelector(
@@ -281,14 +382,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             allowedExtensions: ['db', 'DB'],
                           ),
                           const SizedBox(height: 16),
-                          const Text('Windows Music Root', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                          const SizedBox(height: 4),
-                          _buildPathSelector(
-                            controller: _winRootController,
-                            onPathSelected: (p) => _winRootController.text = p,
-                            isDirectory: true,
-                          ),
-                          const SizedBox(height: 16),
+                          if (!Platform.isAndroid) ...[
+                            const Text('Windows Music Root', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                            const SizedBox(height: 4),
+                            _buildPathSelector(
+                              controller: _winRootController,
+                              onPathSelected: (p) => _winRootController.text = p,
+                              isDirectory: true,
+                            ),
+                            const SizedBox(height: 16),
+                          ],
                           const Text('Android Music Root', style: TextStyle(color: Colors.white70, fontSize: 12)),
                           const SizedBox(height: 4),
                           _buildPathSelector(
@@ -308,39 +411,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             activeColor: VoxProTheme.accent,
                           ),
                           const SizedBox(height: 16),
-                          const Text('AI Vault Directory', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                          if (!Platform.isAndroid) ...[
+                            const Text('AI Vault Directory (Settings sync here automatically!)', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                            const SizedBox(height: 4),
+                            _buildPathSelector(
+                              controller: _vaultController,
+                              onPathSelected: (p) {
+                                _vaultController.text = p;
+                                VoxSettingsService.instance.setAiVaultPath(p).then((_) => _loadAvailableProfiles());
+                              },
+                              isDirectory: true,
+                            ),
+                            const SizedBox(height: 16),
+                            const Text('AI HotZone Directory', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                            const SizedBox(height: 4),
+                            _buildPathSelector(
+                              controller: _hotZoneController,
+                              onPathSelected: (p) => _hotZoneController.text = p,
+                              isDirectory: true,
+                            ),
+                            const SizedBox(height: 16),
+                            const Text('Karaoke Maker Engine Directory', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                            const SizedBox(height: 4),
+                            _buildPathSelector(
+                              controller: _engineController,
+                              onPathSelected: (p) => _engineController.text = p,
+                              isDirectory: true,
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                          const Text('Backend Server URL (Orchestrator)', style: TextStyle(color: Colors.white70, fontSize: 12)),
                           const SizedBox(height: 4),
-                          _buildPathSelector(
-                            controller: _vaultController,
-                            onPathSelected: (p) => _vaultController.text = p,
-                            isDirectory: true,
-                          ),
-                          const SizedBox(height: 16),
-                          const Text('AI HotZone Directory', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                          const SizedBox(height: 4),
-                          _buildPathSelector(
-                            controller: _hotZoneController,
-                            onPathSelected: (p) => _hotZoneController.text = p,
-                            isDirectory: true,
-                          ),
-                          const SizedBox(height: 16),
-                          const Text('Karaoke Maker Engine Directory', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                          const SizedBox(height: 4),
-                          _buildPathSelector(
-                            controller: _engineController,
-                            onPathSelected: (p) => _engineController.text = p,
-                            isDirectory: true,
-                          ),
-                          const SizedBox(height: 24),
-                          Center(
-                            child: ElevatedButton.icon(
-                              icon: const Icon(Icons.save),
-                              label: const Text('Save Settings'),
-                              style: ElevatedButton.styleFrom(backgroundColor: VoxProTheme.accent, foregroundColor: Colors.black),
-                              onPressed: _savePaths,
+                          TextField(
+                            controller: _orchestratorUrlController,
+                            style: const TextStyle(color: Colors.white, fontSize: 14),
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              filled: true,
+                              fillColor: Colors.black45,
+                              border: OutlineInputBorder(),
                             ),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 24),
                         ],
                       ),
                     ),
@@ -403,7 +515,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('Close', style: TextStyle(color: VoxProTheme.textSecondary)),
-          )
+          ),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.save),
+            label: const Text('Save Settings'),
+            style: ElevatedButton.styleFrom(backgroundColor: VoxProTheme.accent, foregroundColor: Colors.black),
+            onPressed: _savePaths,
+          ),
         ],
       ),
     );

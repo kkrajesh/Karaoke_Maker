@@ -1,7 +1,8 @@
 import requests
 from bs4 import BeautifulSoup
+import urllib.parse
 
-def search_duckduckgo_lyrics(query):
+def search_yahoo_lyrics(query):
     search_terms = [
         f"{query} lyrics site:m3db.com",
         f"{query} lyrics site:msidb.org",
@@ -13,22 +14,24 @@ def search_duckduckgo_lyrics(query):
     urls_seen = set()
     
     for search_term in search_terms:
-        print(f"Searching: {search_term}")
-        response = requests.post(
-            'https://lite.duckduckgo.com/lite/', 
-            data={'q': search_term}, 
+        print(f"Searching Yahoo: {search_term}")
+        url = 'https://search.yahoo.com/search?p=' + urllib.parse.quote(search_term)
+        response = requests.get(
+            url, 
             headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'},
             timeout=5
         )
         print(f"Status Code: {response.status_code}")
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, 'html.parser')
-            for a in soup.find_all('a'):
-                href = a.get('href', '')
-                if href.startswith('http') and 'duckduckgo.com' not in href:
-                    if href not in urls_seen:
+            for div in soup.find_all('div', class_='compTitle'):
+                a = div.find('a')
+                if a:
+                    href = a.get('href', '')
+                    title = a.text.strip()
+                    if href and href not in urls_seen:
                         urls_seen.add(href)
-                        results.append({"title": a.text.strip(), "url": href})
+                        results.append({"title": title, "url": href})
     return results
 
-print(search_duckduckgo_lyrics("Chundathu chethipoo"))
+print(search_yahoo_lyrics("Chundathu chethipoo"))
