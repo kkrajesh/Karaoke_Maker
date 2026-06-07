@@ -113,12 +113,20 @@ This project is executed in **Linear Incremental Phases**. Each phase must be ve
     2. Integrated auto-generation of "Vocal Parts" using intelligent parsing of `vocal_map.json` and heuristics to club close segments.
     3. Engineered robust timeline scrubbing intelligence in `_onControllerUpdate` to strictly enforce playback within defined segments, pausing exactly at boundaries and preventing out-of-bounds playback.
     4. Seamlessly synced live editing to the background `SegmentedProgressBar` to provide instant visual feedback of segment bounds.
+    5. ability to adjust the vocals volume for practice. This need to work on intelligently with segments as well. if a segment is a solo part it should be adjusted accordingly, if it is a group/duet part it should be adjusted accordingly - for duets only adjust the vocal volume for segments marked "instrumental/both" other singers segment should continue at regular volumne.
+    6. Advanced: Ability to create a medley by picking segments from multiple songs and creating a new song with those segments in order. 
+
 
 
 * **General future ideas**
 1.  **Duet Karaoke Generation** ability to use the segments for singer 1/2/3 and use that segment to generate Karaoke files for singer 1 - which will have other vocals and no vocals for singer 1 sections. Similarly for other singers as well
 2. ** Karaoke Video Generation with Image + Audio** using AI Video Generation using StableDiffusion+ffmpeg - incorporating lyrics, graph, singer parts, all customizable per generation.
-
+3. ** Platform Sync Up ** 
+    now that all functionalies are working across platforms. I need a plan to keep contents on both platforms in sycnc - espcially the AI Hub content. 
+    1. Keep AI content in sync - Try to use the cloud storage feature that is already existing for the current media library, but enhance it to support AI content as well. So the plan should include
+    2. How to sync AI content and MMDB content in sync on generation of AI content. 
+    3. The AI services must be able to be initiated and controlled from the android device and the content should be saved to the cloud storage and synced across devices. 
+    3. How to initiate AI Queue from android, and potentially do this while disconnected from the windows services - This would be nice to have feature.
 
 * **Bugs to Fix**
 1. after playing a song from Library, playing a youtube video plays both youtube video as well as the library vocals in the background.
