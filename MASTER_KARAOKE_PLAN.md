@@ -113,8 +113,9 @@ This project is executed in **Linear Incremental Phases**. Each phase must be ve
     2. Integrated auto-generation of "Vocal Parts" using intelligent parsing of `vocal_map.json` and heuristics to club close segments.
     3. Engineered robust timeline scrubbing intelligence in `_onControllerUpdate` to strictly enforce playback within defined segments, pausing exactly at boundaries and preventing out-of-bounds playback.
     4. Seamlessly synced live editing to the background `SegmentedProgressBar` to provide instant visual feedback of segment bounds.
-    5. ability to adjust the vocals volume for practice. This need to work on intelligently with segments as well. if a segment is a solo part it should be adjusted accordingly, if it is a group/duet part it should be adjusted accordingly - for duets only adjust the vocal volume for segments marked "instrumental/both" other singers segment should continue at regular volumne.
+    5. **COMPLETED:** Ability to adjust the vocals volume for practice. This intelligently handles 'Both' mode by automatically mixing the guide vocals at an adjustable volume (default 50%).
     6. Advanced: Ability to create a medley by picking segments from multiple songs and creating a new song with those segments in order. 
+    7. **COMPLETED:** Ability to save the segments for youtube videos and preserve it for later. Mapped and loaded reliably using the YouTube ID via the AI Vault indexing system.
 
 
 

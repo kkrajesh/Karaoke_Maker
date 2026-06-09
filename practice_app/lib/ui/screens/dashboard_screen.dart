@@ -33,6 +33,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool? _filterPitch;
   bool? _filterMap;
   bool? _filterLyrics;
+  bool? _filterProfile;
 
   @override
   void initState() {
@@ -266,7 +267,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           });
                         } else {
                            setState(() {
-                             _selectedSong = Song(title: result.title, directoryPath: result.url ?? '');
+                             final url = result.url ?? '';
+                             final ytId = RegExp(r'(?:v=|/)([0-9A-Za-z_-]{11}).*').firstMatch(url)?.group(1) ?? '';
+                             _selectedSong = Song(title: result.title, directoryPath: url, mmId: ytId.isNotEmpty ? 'YT_$ytId' : null);
                              _selectedIndex = 1;
                            });
                         }
@@ -392,6 +395,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   _buildTriStateChip('Pitch', _filterPitch, (v) => setState(() => _filterPitch = v), VoxProTheme.pitchAccent),
                   _buildTriStateChip('Map', _filterMap, (v) => setState(() => _filterMap = v), VoxProTheme.mapAccent),
                   _buildTriStateChip('Lyrics', _filterLyrics, (v) => setState(() => _filterLyrics = v), VoxProTheme.lyricsAccent),
+                  _buildTriStateChip('Profile', _filterProfile, (v) => setState(() => _filterProfile = v), VoxProTheme.accent),
                 ],
               ),
             ],
@@ -417,6 +421,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             
             if (_filterLyrics == true) filteredSongs = filteredSongs.where((s) => s.hasEnglishLyrics || s.hasNativeLyrics).toList();
             if (_filterLyrics == false) filteredSongs = filteredSongs.where((s) => !(s.hasEnglishLyrics || s.hasNativeLyrics)).toList();
+            
+            if (_filterProfile == true) filteredSongs = filteredSongs.where((s) => s.hasPerformanceProfile).toList();
+            if (_filterProfile == false) filteredSongs = filteredSongs.where((s) => !s.hasPerformanceProfile).toList();
                 
             if (filteredSongs.isEmpty) {
               return const Center(child: Text('No songs found', style: TextStyle(color: VoxProTheme.textSecondary)));

@@ -73,7 +73,15 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
     
     // Check if YouTube
     if (song.directoryPath.startsWith('http')) {
+      String lyricsDir = '';
+      if (song.mmId != null && song.mmId!.isNotEmpty) {
+        final aiService = VoxAiTrackingService.instance;
+        lyricsDir = aiService.getArtifactDirectory(song.mmId!, song.title);
+        _performanceProfile = await PerformanceProfileService.loadProfile(lyricsDir);
+      }
+      
       setState(() {
+        if (lyricsDir.isNotEmpty) _currentLyricsDir = lyricsDir;
         _mediaSource = VoxMediaSource(url: song.directoryPath, isYoutube: true);
         _isLoading = false;
       });
@@ -331,29 +339,39 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
             ],
           ),
         ),
-        
         Expanded(
-          child: VoxPlayerDashboard(
-            source: _mediaSource,
-            lyrics: _songLyrics,
-            pitchData: _targetPitchData,
-            vocalMapData: _vocalMapData,
-            directoryPath: _currentLyricsDir ?? widget.selectedSong!.directoryPath,
-            vocalsPath: _currentVocalsPath,
-            performanceProfile: _performanceProfile,
-            onProfileSaved: (profile) {
-              if (widget.selectedSong != null) {
-                final saveDir = (widget.selectedSong!.mmId != null && widget.selectedSong!.mmId!.isNotEmpty) ? VoxAiTrackingService.instance.getArtifactDirectory(widget.selectedSong!.mmId!, widget.selectedSong!.title) : widget.selectedSong!.directoryPath;
-                PerformanceProfileService.saveProfile(saveDir, profile);
+            child: Builder(
+              builder: (context) {
+                String finalDirPath = _currentLyricsDir ?? widget.selectedSong!.directoryPath;
+                if (widget.selectedSong != null && widget.selectedSong!.mmId != null && widget.selectedSong!.mmId!.isNotEmpty) {
+                  finalDirPath = VoxAiTrackingService.instance.getArtifactDirectory(widget.selectedSong!.mmId!, widget.selectedSong!.title);
+                }
+                
+                return VoxPlayerDashboard(
+                  source: _mediaSource,
+                  lyrics: _songLyrics,
+                  pitchData: _targetPitchData,
+                  vocalMapData: _vocalMapData,
+                  directoryPath: finalDirPath,
+                  vocalsPath: _currentVocalsPath,
+                  performanceProfile: _performanceProfile,
+                  onProfileSaved: (profile) {
+                    if (widget.selectedSong != null) {
+                      PerformanceProfileService.saveProfile(finalDirPath, profile);
+                    }
+                    setState(() {
+                      _performanceProfile = profile;
+                    });
+                  },
+                  onAudioAdjustmentsChanged: (pitch, tempo) {
+                    _currentPitch = pitch;
+                    _currentTempo = tempo;
+                  },
+                  config: VoxDashboardConfig.practiceMode(),
+                );
               }
-            },
-            onAudioAdjustmentsChanged: (pitch, tempo) {
-              _currentPitch = pitch;
-              _currentTempo = tempo;
-            },
-            config: VoxDashboardConfig.practiceMode(),
+            ),
           ),
-        ),
       ],
     );
   }

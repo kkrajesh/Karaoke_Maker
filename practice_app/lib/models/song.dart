@@ -11,6 +11,7 @@ class Song {
   final bool hasVocalMap;
   final String? mmId; // MediaMonkey ID
   bool isMissing; // Added to track missing folders
+  bool hasPerformanceProfile; // Tracks if sequences have been saved
 
   String get id => mmId ?? directoryPath.split(Platform.pathSeparator).last;
 
@@ -25,6 +26,7 @@ class Song {
     this.hasVocalMap = false,
     this.mmId,
     this.isMissing = false,
+    this.hasPerformanceProfile = false,
   });
 
   factory Song.fromDirectory(Directory dir) {

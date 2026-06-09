@@ -84,7 +84,38 @@ class FileExplorerService extends ChangeNotifier {
         
         final song = Song.fromAiArtifact(row, actualDirPath);
         song.isMissing = !Directory(song.directoryPath).existsSync();
+        
+        final profileFile = File('${song.directoryPath}${Platform.pathSeparator}performance_profiles.json');
+        song.hasPerformanceProfile = profileFile.existsSync();
+        
         verifiedSongs.add(song);
+      }
+      
+      final vaultDir = Directory(vaultPath);
+      if (vaultDir.existsSync()) {
+        final dirs = vaultDir.listSync().whereType<Directory>();
+        for (final dir in dirs) {
+          final dirName = dir.path.split(Platform.pathSeparator).last;
+          if (dirName.startsWith('YT_')) {
+            final mmId = dirName.split('_').take(2).join('_');
+            if (verifiedSongs.any((s) => s.mmId == mmId)) {
+               continue;
+            }
+            final profileFile = File('${dir.path}${Platform.pathSeparator}performance_profiles.json');
+            if (profileFile.existsSync()) {
+               final title = dirName.substring(mmId.length).replaceFirst(RegExp(r'^_'), '');
+               final ytUrl = 'https://youtube.com/watch?v=${mmId.replaceFirst('YT_', '')}';
+               final song = Song(
+                 title: title.isEmpty ? 'YouTube Video' : title,
+                 directoryPath: ytUrl,
+                 mmId: mmId,
+                 isMissing: false,
+               );
+               song.hasPerformanceProfile = true;
+               verifiedSongs.add(song);
+            }
+          }
+        }
       }
       
       songs = verifiedSongs;
