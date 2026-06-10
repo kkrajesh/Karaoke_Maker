@@ -85,8 +85,7 @@ class FileExplorerService extends ChangeNotifier {
         final song = Song.fromAiArtifact(row, actualDirPath);
         song.isMissing = !Directory(song.directoryPath).existsSync();
         
-        final profileFile = File('${song.directoryPath}${Platform.pathSeparator}performance_profiles.json');
-        song.hasPerformanceProfile = profileFile.existsSync();
+        song.hasPerformanceProfile = PerformanceProfileService.hasProfileSync(song.directoryPath);
         
         verifiedSongs.add(song);
       }

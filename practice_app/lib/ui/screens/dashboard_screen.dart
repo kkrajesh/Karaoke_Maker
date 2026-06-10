@@ -546,6 +546,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onPressed: _showUnifiedSearch,
             tooltip: 'Global Search',
           ),
+          IconButton(
+            icon: const Icon(Icons.auto_awesome_motion),
+            tooltip: 'Medley Builder',
+            onPressed: () {
+              final service = Provider.of<FileExplorerService>(context, listen: false);
+              final available = service.songs
+                  .where((s) => s.hasPerformanceProfile)
+                  .map((s) => MedleySourceSong(
+                        mmId: s.id,
+                        title: s.title,
+                        artist: 'Unknown',
+                        vaultPath: s.directoryPath,
+                      ))
+                  .toList();
+              Navigator.push(context, MaterialPageRoute(builder: (_) => MedleyBuilderScreen(
+                availableSongs: available,
+                queueService: AiQueueService.instance,
+              )));
+            },
+          ),
           const AiQueueStatusIcon(),
           const SizedBox(width: 16),
         ],
