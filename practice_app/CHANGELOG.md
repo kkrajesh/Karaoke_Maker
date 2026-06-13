@@ -1,3 +1,6 @@
+## 1.5.8+1
+- Pulled in vox_player_core 0.4.7 which includes Medley Draft saving and loading features.
+
 ## 1.5.7+1
 - Integrated MedleyBuilderScreen and MedleyActiveSessionScreen into dashboard.
 - Fixed python backend 	ask_worker medley generation path.

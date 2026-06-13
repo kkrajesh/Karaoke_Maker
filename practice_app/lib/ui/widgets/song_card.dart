@@ -6,9 +6,10 @@ class SongCard extends StatelessWidget {
   final Song song;
   final VoidCallback onTap;
   final VoidCallback? onRemove;
+  final VoidCallback? onRename;
   final void Function(BuildContext, String, String, String)? onReprocess;
 
-  const SongCard({Key? key, required this.song, required this.onTap, this.onRemove, this.onReprocess}) : super(key: key);
+  const SongCard({Key? key, required this.song, required this.onTap, this.onRemove, this.onRename, this.onReprocess}) : super(key: key);
 
   Widget _buildBadge(IconData icon, String label, bool active) {
     return Container(
@@ -83,6 +84,16 @@ class SongCard extends StatelessWidget {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      if (!song.isMissing && onRename != null)
+                        IconButton(
+                          icon: const Icon(Icons.edit, color: VoxProTheme.accent, size: 20),
+                          onPressed: onRename,
+                          tooltip: 'Rename Song',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      if (!song.isMissing && onRename != null && onReprocess != null)
+                        const SizedBox(width: 8),
                       if (onReprocess != null)
                         PopupMenuButton<String>(
                           icon: const Icon(Icons.refresh, color: Colors.amberAccent, size: 20),

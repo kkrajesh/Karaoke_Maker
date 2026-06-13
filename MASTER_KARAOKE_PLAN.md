@@ -130,7 +130,10 @@ This project is executed in **Linear Incremental Phases**. Each phase must be ve
     3. How to initiate AI Queue from android, and potentially do this while disconnected from the windows services - This would be nice to have feature.
 
 * **Bugs to Fix**
-1. after playing a song from Library, playing a youtube video plays both youtube video as well as the library vocals in the background.
+- [x] After playing a song from Library, playing a youtube video plays both youtube video as well as the library vocals in the background.
+- [] AI Song generation - title standardaization is not accurate. Example: the AI log is showing "[Finalize] Task Millennium_Musics_____Namukku_Parkkan__1781318942164 migrated to AI_Vault successfully.", but the library is showing results as "പവിഴം പോൽ പവിഴാധരം | Namukku Parkkan Munthiri Thoppukal | Video Song | Mohan Lal Hits Johnson Master". I want the library and AI Vault to use standard song tiltle, preferably in english. The core engine should take care of this.
+- [x] ability to rename songs in the AI Library and reflect that changes in the AI Valult across the synced platforms. This need to factor in the segmens, and medleys that uses the existing songs and do not break them
+
 
 
 ---

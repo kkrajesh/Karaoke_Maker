@@ -90,6 +90,15 @@ def main():
             else:
                 update_progress(f"Failed to find web audio for {search_query}")
                 
+        if task.get("sourceType", "").lower() == "medley":
+            update_progress("Initiating Medley Generation...")
+            medley_def = json.loads(task.get("url", "{}"))
+            success = maker.generate_medley(medley_def, progress_callback=update_progress)
+            final_status = "done" if success else "failed"
+            final_msg = "Completed" if success else "Failed"
+            requests.post(f"{base_url}/internal/queue/{task_id}/status", json={"status": final_status, "status_text": final_msg}, timeout=2)
+            return
+
         # Determine what to reprocess
         force_reprocess = task.get("forceReprocess", False)
         component = task.get("reprocessComponent", "all")

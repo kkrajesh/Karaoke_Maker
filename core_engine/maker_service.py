@@ -449,3 +449,182 @@ class MakerService:
                     self.log(None, f"[BATCH EXCEPTION] Error processing '{query}': {e}")
         
         self.log(None, f"=== Batch Processing Complete ===\n")
+    def generate_medley(self, medley_def: dict, progress_callback=None):
+        import datetime
+        import subprocess
+        import re
+        
+        def log(msg):
+            if progress_callback: progress_callback(msg)
+            print(f"[MEDLEY] {msg}")
+
+        title = medley_def.get("title", "Unknown Medley")
+        segments = medley_def.get("segments", [])
+        
+        if not segments:
+            log("No segments provided for medley.")
+            return False
+
+        # Generate a unique ID and setup directory
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_title = sanitize_filename(title)
+        medley_id = f"MDLY_{safe_title}_{timestamp}"
+        target_dir = os.path.join(self.hot_zone, medley_id)
+        os.makedirs(target_dir, exist_ok=True)
+        
+        log(f"Generating medley '{title}' with {len(segments)} segments...")
+
+        inputs = []
+        filter_complex_inst = []
+        filter_complex_vocal = []
+        concat_inst = ""
+        concat_vocal = ""
+        
+        combined_lyrics = []
+        current_medley_ms = 0
+        
+        # Parse segments and prepare ffmpeg inputs
+        for i, seg in enumerate(segments):
+            src_mm_id = seg.get("source_mm_id")
+            start_ms = seg.get("start_ms", 0)
+            end_ms = seg.get("end_ms", 0)
+            crossfade_ms = seg.get("crossfade_ms", 0)
+            
+            src_dir = os.path.join(self.hot_zone, src_mm_id)
+            inst_path = os.path.join(src_dir, f"{src_mm_id}_instrumental.wav")
+            vocal_path = os.path.join(src_dir, f"{src_mm_id}_vocals.wav")
+            lyrics_path = os.path.join(src_dir, f"{src_mm_id}_lyrics_native.lrc")
+            
+            # Use original if split tracks don't exist yet (for unprocessed yt)
+            # Wait! Unprocessed youtube might not have inst/vocals. If missing, we fail or use original.
+            # For simplicity, if instrumental is missing, we use the original audio for both.
+            if not os.path.exists(inst_path):
+                orig_audio = next((f for f in os.listdir(src_dir) if f.endswith('.wav') or f.endswith('.mp4') or f.endswith('.webm')), None)
+                if orig_audio:
+                    inst_path = os.path.join(src_dir, orig_audio)
+                    vocal_path = inst_path
+                else:
+                    log(f"Source audio not found for {src_mm_id}")
+                    return False
+                    
+            # Add to ffmpeg inputs (2 inputs per segment: inst and vocal)
+            input_idx_inst = i * 2
+            input_idx_vocal = i * 2 + 1
+            inputs.extend(['-i', inst_path, '-i', vocal_path])
+            
+            # Format time
+            start_s = start_ms / 1000.0
+            end_s = end_ms / 1000.0
+            
+            # Add trim filters
+            filter_complex_inst.append(f"[{input_idx_inst}:a]atrim=start={start_s}:end={end_s},asetpts=PTS-STARTPTS[i{i}];")
+            filter_complex_vocal.append(f"[{input_idx_vocal}:a]atrim=start={start_s}:end={end_s},asetpts=PTS-STARTPTS[v{i}];")
+            
+            # Handle Lyrics
+            if os.path.exists(lyrics_path):
+                try:
+                    with open(lyrics_path, 'r', encoding='utf-8') as lf:
+                        for line in lf:
+                            line = line.strip()
+                            if not line: continue
+                            match = re.match(r'\[(\d+):(\d+\.\d+)\](.*)', line)
+                            if match:
+                                m, s, text = match.groups()
+                                line_ms = int(m) * 60000 + float(s) * 1000
+                                if start_ms <= line_ms <= end_ms:
+                                    # Shift timestamp
+                                    new_ms = (line_ms - start_ms) + current_medley_ms
+                                    new_m = int(new_ms // 60000)
+                                    new_s = (new_ms % 60000) / 1000.0
+                                    combined_lyrics.append(f"[{new_m:02d}:{new_s:05.2f}]{text}")
+                except Exception as e:
+                    log(f"Error parsing lyrics for {src_mm_id}: {e}")
+            
+            # Duration added to medley timeline
+            seg_dur = end_ms - start_ms
+            current_medley_ms += seg_dur
+            if i < len(segments) - 1:
+                current_medley_ms -= crossfade_ms
+        
+        # Build concat filter
+        # If no crossfade, just use concat filter
+        # Crossfade in ffmpeg audio is complex for N segments. Let's start with hard concat for v1, or basic concat
+        has_crossfades = any(seg.get("crossfade_ms", 0) > 0 for seg in segments)
+        if has_crossfades:
+            # Complex acrossfade logic...
+            # For simplicity in this implementation, we will use acrossfade
+            prev_i = "i0"
+            prev_v = "v0"
+            for i in range(1, len(segments)):
+                cf_s = segments[i-1].get("crossfade_ms", 0) / 1000.0
+                if cf_s > 0:
+                    filter_complex_inst.append(f"[{prev_i}][i{i}]acrossfade=d={cf_s}[i_out{i}];")
+                    filter_complex_vocal.append(f"[{prev_v}][v{i}]acrossfade=d={cf_s}[v_out{i}];")
+                else:
+                    filter_complex_inst.append(f"[{prev_i}][i{i}]concat=n=2:v=0:a=1[i_out{i}];")
+                    filter_complex_vocal.append(f"[{prev_v}][v{i}]concat=n=2:v=0:a=1[v_out{i}];")
+                prev_i = f"i_out{i}"
+                prev_v = f"v_out{i}"
+            concat_inst = f"[{prev_i}]"
+            concat_vocal = f"[{prev_v}]"
+        else:
+            for i in range(len(segments)):
+                concat_inst += f"[i{i}]"
+                concat_vocal += f"[v{i}]"
+            filter_complex_inst.append(f"{concat_inst}concat=n={len(segments)}:v=0:a=1[out_i];")
+            filter_complex_vocal.append(f"{concat_vocal}concat=n={len(segments)}:v=0:a=1[out_v];")
+            concat_inst = "[out_i]"
+            concat_vocal = "[out_v]"
+
+        out_inst_path = os.path.join(target_dir, f"{medley_id}_instrumental.wav")
+        out_vocal_path = os.path.join(target_dir, f"{medley_id}_vocals.wav")
+
+        filter_string = " ".join(filter_complex_inst + filter_complex_vocal)
+        
+        ffmpeg_cmd = [self.ffmpeg_path, "-y"] + inputs + [
+            "-filter_complex", filter_string,
+            "-map", concat_inst, out_inst_path,
+            "-map", concat_vocal, out_vocal_path
+        ]
+        
+        log("Executing FFmpeg rendering...")
+        try:
+            subprocess.run(ffmpeg_cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError as e:
+            log(f"FFmpeg failed: {e}")
+            return False
+
+        # Write lyrics
+        lyrics_out = os.path.join(target_dir, f"{medley_id}_lyrics_native.lrc")
+        with open(lyrics_out, 'w', encoding='utf-8') as f:
+            f.write("\n".join(combined_lyrics))
+            
+        # Write performance profile (a single sequence spanning the whole medley)
+        profile = {
+            "sequences": [{
+                "name": "Medley",
+                "segments": [{
+                    "start_ms": 0,
+                    "end_ms": current_medley_ms,
+                    "playback_mode": "both"
+                }]
+            }]
+        }
+        profile_path = os.path.join(target_dir, f"{medley_id}_performance_profiles.json")
+        with open(profile_path, 'w') as f:
+            json.dump(profile, f)
+            
+        # Update SQLite AI Tracking
+        from core_engine.karaoke_orchestrator import init_db
+        import sqlite3
+        db_path = os.path.join(self.hot_zone, "vox_ai_metadata.db")
+        conn = sqlite3.connect(db_path)
+        c = conn.cursor()
+        c.execute('''INSERT OR REPLACE INTO ai_artifacts 
+                     (mm_id, title, has_vocals, has_instrumental, has_lyrics, last_processed) 
+                     VALUES (?, ?, 1, 1, 1, CURRENT_TIMESTAMP)''', (medley_id, title))
+        conn.commit()
+        conn.close()
+
+        log("Medley Generation Complete!")
+        return True

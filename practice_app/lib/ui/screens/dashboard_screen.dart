@@ -227,6 +227,53 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  void _showRenameDialog(BuildContext context, Song song) {
+    final TextEditingController titleController = TextEditingController(text: song.title);
+    
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: VoxProTheme.cardBg,
+          title: const Text('Rename Song', style: TextStyle(color: VoxProTheme.accent)),
+          content: TextField(
+            controller: titleController,
+            style: const TextStyle(color: VoxProTheme.textPrimary),
+            decoration: const InputDecoration(
+              labelText: 'New Title',
+              labelStyle: TextStyle(color: VoxProTheme.textSecondary),
+              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: VoxProTheme.border)),
+              focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: VoxProTheme.accent)),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel', style: TextStyle(color: VoxProTheme.textSecondary)),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final newTitle = titleController.text.trim();
+                if (newTitle.isNotEmpty && newTitle != song.title) {
+                  Navigator.pop(context);
+                  final service = Provider.of<FileExplorerService>(context, listen: false);
+                  await service.renameSong(song.mmId ?? song.id, song.title, newTitle);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Song renamed successfully')));
+                  }
+                } else {
+                  Navigator.pop(context);
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: VoxProTheme.accent),
+              child: const Text('Rename', style: TextStyle(color: VoxProTheme.background)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _showUnifiedSearch() {
     final service = Provider.of<FileExplorerService>(context, listen: false);
     final localPath = service.currentDirectory ?? 'C:\\'; // default if none selected
@@ -245,6 +292,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               providers: [
                 DartYouTubeSearchProvider(),
                 MediaMonkeySearchProvider(prioritizeLocal: true),
+                AiVaultSearchProvider(),
               ],
               actionBuilder: (context, result) {
                 return Row(
@@ -445,6 +493,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         },
                         onReprocess: _showReprocessDialog,
                         onRemove: () => service.removeFromLibrary(song.id),
+                        onRename: () => _showRenameDialog(context, song),
                       );
                     },
                   )
@@ -476,6 +525,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               },
                               onRemove: () => service.removeFromLibrary(song.id),
                               onReprocess: _showReprocessDialog,
+                              onRename: () => _showRenameDialog(context, song),
                             );
                           },
                         );

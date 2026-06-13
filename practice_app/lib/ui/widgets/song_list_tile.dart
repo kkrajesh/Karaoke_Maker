@@ -9,6 +9,7 @@ class SongListTile extends StatelessWidget {
   /// If null, the chips will be view-only.
   final void Function(BuildContext context, String songId, String label, String component)? onReprocess;
   final VoidCallback? onRemove;
+  final VoidCallback? onRename;
 
   const SongListTile({
     Key? key,
@@ -16,6 +17,7 @@ class SongListTile extends StatelessWidget {
     required this.onTap,
     this.onReprocess,
     this.onRemove,
+    this.onRename,
   }) : super(key: key);
 
   Widget _buildComponentChip(BuildContext context, String label, String component, bool exists) {
@@ -85,6 +87,12 @@ class SongListTile extends StatelessWidget {
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (!song.isMissing && onRename != null)
+                IconButton(
+                  icon: const Icon(Icons.edit, color: VoxProTheme.accent),
+                  onPressed: onRename,
+                  tooltip: 'Rename Song',
+                ),
               if (onReprocess != null)
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.refresh, color: Colors.amberAccent),

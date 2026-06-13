@@ -68,6 +68,15 @@ class FileExplorerService extends ChangeNotifier {
     scanDirectory(); // Refresh list after deletion
   }
 
+  Future<void> renameSong(String mmId, String oldTitle, String newTitle) async {
+    try {
+      await VoxAiTrackingService.instance.renameArtifact(mmId, oldTitle, newTitle);
+      scanDirectory();
+    } catch (e) {
+      print('Error renaming song: $e');
+    }
+  }
+
   void scanDirectory() async {
     isLoading = true;
     notifyListeners();
@@ -121,7 +130,13 @@ class FileExplorerService extends ChangeNotifier {
       currentDirectory = vaultPath; // Just to satisfy UI display
     } catch (e, st) {
       print("Error scanning AI Vault: $e");
-      songs = [];
+      songs = [
+        Song(
+          title: 'ERROR: $e',
+          directoryPath: '',
+          mmId: 'ERROR',
+        )
+      ];
     }
 
     isLoading = false;
