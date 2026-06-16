@@ -12,12 +12,16 @@ class ActiveSessionScreen extends StatefulWidget {
   final Song? selectedSong;
   final Function(Song)? onSongSwitched;
   final VoidCallback? onToggleSidebar;
+  final bool isFullScreen;
+  final VoidCallback? onToggleFullScreen;
 
   const ActiveSessionScreen({
     Key? key, 
     this.selectedSong,
     this.onSongSwitched,
     this.onToggleSidebar,
+    this.isFullScreen = false,
+    this.onToggleFullScreen,
   }) : super(key: key);
 
   @override
@@ -204,38 +208,48 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
       return const Center(child: CircularProgressIndicator(color: VoxProTheme.accent));
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Stack(
       children: [
-        Padding(
-          padding: EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 16.0 : 24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (!widget.isFullScreen)
+              Padding(
+                padding: EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 12.0 : 24.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Active Session',
-                          style: Theme.of(context).textTheme.headlineMedium,
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Active Session',
+                              style: MediaQuery.of(context).size.width < 600
+                                  ? const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: VoxProTheme.textPrimary)
+                                  : Theme.of(context).textTheme.headlineMedium,
+                            ),
+                            if (widget.onToggleFullScreen != null)
+                              IconButton(
+                                icon: const Icon(Icons.fullscreen, color: VoxProTheme.textSecondary),
+                                onPressed: widget.onToggleFullScreen,
+                                tooltip: 'Full Screen Mode',
+                              ),
+                          ],
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          widget.selectedSong!.title,
-                          style: const TextStyle(
-                            color: VoxProTheme.accent,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
+                  const SizedBox(height: 4),
+                  Text(
+                    widget.selectedSong!.title,
+                    style: TextStyle(
+                      color: VoxProTheme.accent,
+                      fontSize: MediaQuery.of(context).size.width < 600 ? 16 : 20,
+                      fontWeight: FontWeight.bold,
                     ),
+                    overflow: TextOverflow.ellipsis,
                   ),
+                  const SizedBox(height: 16),
                   Builder(
                     builder: (context) {
                       final result = VoxSearchResult(
@@ -245,92 +259,95 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                         url: widget.selectedSong!.directoryPath,
                         sourceType: widget.selectedSong!.directoryPath.startsWith('http') ? 'youtube' : 'LocalDirectory',
                       );
-                      return Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (widget.selectedSong!.id.startsWith('UNKNOWN_'))
+                      return SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (widget.selectedSong!.id.startsWith('UNKNOWN_'))
+                              ElevatedButton.icon(
+                                icon: const Icon(Icons.link, size: 16),
+                                label: const Text('Link to MediaMonkey'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.orange,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                ),
+                                onPressed: () {
+                                  _showLinkDialog(context, widget.selectedSong!);
+                                },
+                              ),
+                            if (widget.selectedSong!.id.startsWith('UNKNOWN_'))
+                              const SizedBox(width: 8),
                             ElevatedButton.icon(
-                              icon: const Icon(Icons.link, size: 16),
-                              label: const Text('Link to MediaMonkey'),
+                              icon: const Icon(Icons.music_note, size: 16),
+                              label: const Text('Gen MP3s'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.orange,
+                                backgroundColor: Colors.deepPurple,
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                               ),
-                              onPressed: () {
-                                _showLinkDialog(context, widget.selectedSong!);
+                              onPressed: () async {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Starting MP3 generation...')),
+                                );
+                                try {
+                                  await VoxApiService.generatePracticeMp3s(
+                                    songId: widget.selectedSong!.id,
+                                    pitchShift: _currentPitch,
+                                    tempoShift: _currentTempo,
+                                  );
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('MP3 generation started successfully!')),
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red),
+                                    );
+                                  }
+                                }
                               },
                             ),
-                          if (widget.selectedSong!.id.startsWith('UNKNOWN_'))
                             const SizedBox(width: 8),
-                          ElevatedButton.icon(
-                            icon: const Icon(Icons.music_note, size: 16),
-                            label: const Text('Gen MP3s'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.deepPurple,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            ),
-                            onPressed: () async {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Starting MP3 generation...')),
-                              );
-                              try {
-                                await VoxApiService.generatePracticeMp3s(
-                                  songId: widget.selectedSong!.id,
-                                  pitchShift: _currentPitch,
-                                  tempoShift: _currentTempo,
+                            ElevatedButton.icon(
+                              icon: const Icon(Icons.refresh, size: 16),
+                              label: const Text('Regenerate Lyrics'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.teal,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              ),
+                              onPressed: () async {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Re-processing lyrics through AI...')),
                                 );
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('MP3 generation started successfully!')),
+                                try {
+                                  await VoxApiService.reprocessComponent(
+                                    songId: widget.selectedSong!.id,
+                                    title: widget.selectedSong!.title,
+                                    component: 'lyrics',
                                   );
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Lyrics regeneration started! Please wait...')),
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red),
+                                    );
+                                  }
                                 }
-                              } catch (e) {
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red),
-                                  );
-                                }
-                              }
-                            },
-                          ),
-                          const SizedBox(width: 8),
-                          ElevatedButton.icon(
-                            icon: const Icon(Icons.refresh, size: 16),
-                            label: const Text('Regenerate Lyrics'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.teal,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              },
                             ),
-                            onPressed: () async {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Re-processing lyrics through AI...')),
-                              );
-                              try {
-                                await VoxApiService.reprocessComponent(
-                                  songId: widget.selectedSong!.id,
-                                  title: widget.selectedSong!.title,
-                                  component: 'lyrics',
-                                );
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Lyrics regeneration started! Please wait...')),
-                                  );
-                                }
-                              } catch (e) {
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red),
-                                  );
-                                }
-                              }
-                            },
-                          ),
-                          const SizedBox(width: 8),
-                          AiQueueButton(result: result, isVisible: true),
-                        ],
+                            const SizedBox(width: 8),
+                            AiQueueButton(result: result, isVisible: true),
+                          ],
+                        ),
                       );
                     },
                   ),
@@ -372,8 +389,23 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
               }
             ),
           ),
-      ],
-    );
+        ],
+      ),
+      if (widget.isFullScreen && widget.onToggleFullScreen != null)
+        Positioned(
+          top: 16,
+          right: 16,
+          child: IconButton(
+            icon: const Icon(Icons.fullscreen_exit, color: Colors.white),
+            style: IconButton.styleFrom(
+              backgroundColor: Colors.black54,
+              padding: const EdgeInsets.all(8),
+            ),
+            onPressed: widget.onToggleFullScreen,
+            tooltip: 'Exit Full Screen',
+          ),
+        ),
+    ]);
   }
 
   void _showLinkDialog(BuildContext context, Song song) {

@@ -46,7 +46,7 @@ class SongCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         child: Card(
           child: Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.all(12.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -73,7 +73,7 @@ class SongCard extends StatelessWidget {
                     child: Text(
                       song.title,
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontSize: 16,
+                        fontSize: 14,
                         color: song.isMissing ? Colors.redAccent : VoxProTheme.textPrimary,
                         decoration: song.isMissing ? TextDecoration.lineThrough : null,
                       ),

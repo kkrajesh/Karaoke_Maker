@@ -104,25 +104,56 @@ class FileExplorerService extends ChangeNotifier {
         final dirs = vaultDir.listSync().whereType<Directory>();
         for (final dir in dirs) {
           final dirName = dir.path.split(Platform.pathSeparator).last;
+          
+          String mmId = '';
+          String title = dirName;
+          
           if (dirName.startsWith('YT_')) {
-            final mmId = dirName.split('_').take(2).join('_');
-            if (verifiedSongs.any((s) => s.mmId == mmId)) {
-               continue;
-            }
-            final profileFile = File('${dir.path}${Platform.pathSeparator}performance_profiles.json');
-            if (profileFile.existsSync()) {
-               final title = dirName.substring(mmId.length).replaceFirst(RegExp(r'^_'), '');
-               final ytUrl = 'https://youtube.com/watch?v=${mmId.replaceFirst('YT_', '')}';
-               final song = Song(
-                 title: title.isEmpty ? 'YouTube Video' : title,
-                 directoryPath: ytUrl,
-                 mmId: mmId,
-                 isMissing: false,
-               );
-               song.hasPerformanceProfile = true;
-               verifiedSongs.add(song);
-            }
+             mmId = dirName.split('_').take(2).join('_'); // 'YT_xxxxx'
+             title = dirName.substring(mmId.length).replaceFirst(RegExp(r'^_'), '');
+          } else {
+             final parts = dirName.split('_');
+             if (parts.length > 1 && RegExp(r'^\d+$').hasMatch(parts[0])) {
+               // Standard mmId_title format (e.g. 12345_Song_Name)
+               mmId = parts[0];
+               title = parts.sublist(1).join('_');
+             } else {
+               mmId = 'UNKNOWN_$dirName';
+               title = dirName;
+             }
           }
+
+          if (verifiedSongs.any((s) => s.directoryPath == dir.path || (s.mmId == mmId && mmId.isNotEmpty && !mmId.startsWith('UNKNOWN_')))) {
+             continue; // Already processed via SQLite
+          }
+          
+          // Check what files exist
+          final files = dir.listSync().map((e) => e.path.split(Platform.pathSeparator).last).toList();
+          final hasInst = files.any((f) => f.contains('instrumental.'));
+          final hasVocals = files.any((f) => f.contains('vocals.'));
+          final hasPitch = files.any((f) => f.contains('pitch_profile.json'));
+          final hasMap = files.any((f) => f.contains('vocal_map.json'));
+          final hasLyrics = files.any((f) => f.contains('lyrics') && (f.endsWith('.lrc') || f.endsWith('.txt')));
+          final hasProfile = files.any((f) => f.contains('performance_profiles.json'));
+
+          final stat = dir.statSync();
+
+          final song = Song(
+            title: title.isEmpty ? dirName : title.replaceAll('_', ' '),
+            directoryPath: dir.path, // We MUST use dir.path so the player can load local files
+            mmId: mmId,
+            isMissing: false,
+            dateModified: stat.modified,
+            hasInstrumental: hasInst,
+            hasVocals: hasVocals,
+            hasPitchProfile: hasPitch,
+            hasVocalMap: hasMap,
+            hasEnglishLyrics: hasLyrics,
+            hasNativeLyrics: hasLyrics,
+          );
+          song.hasPerformanceProfile = hasProfile;
+          
+          verifiedSongs.add(song);
         }
       }
       

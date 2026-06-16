@@ -12,6 +12,7 @@ class Song {
   final String? mmId; // MediaMonkey ID
   bool isMissing; // Added to track missing folders
   bool hasPerformanceProfile; // Tracks if sequences have been saved
+  final DateTime? dateModified; // Tracks when AI artifacts were updated
 
   String get id => mmId ?? directoryPath.split(Platform.pathSeparator).last;
 
@@ -27,6 +28,7 @@ class Song {
     this.mmId,
     this.isMissing = false,
     this.hasPerformanceProfile = false,
+    this.dateModified,
   });
 
   factory Song.fromDirectory(Directory dir) {
@@ -49,6 +51,11 @@ class Song {
     final String mmId = row['mm_id']?.toString() ?? '';
     final String title = row['title']?.toString() ?? 'Unknown Title';
     
+    DateTime? lastProcessed;
+    if (row['last_processed'] != null) {
+      lastProcessed = DateTime.tryParse(row['last_processed'] as String);
+    }
+    
     // In the new system, we just map everything logically.
     return Song(
       title: title,
@@ -60,6 +67,7 @@ class Song {
       hasNativeLyrics: row['has_lyrics'] == 1,
       hasEnglishLyrics: false, // For now, track single lyrics
       hasVocalMap: row['has_vocal_map'] == 1,
+      dateModified: lastProcessed,
     );
   }
 }

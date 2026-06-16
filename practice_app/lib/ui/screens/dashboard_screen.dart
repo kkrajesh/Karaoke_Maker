@@ -25,6 +25,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _isListView = true;
   String _searchQuery = '';
   
+  bool _isFullScreen = false;
   bool _isSidebarOpen = false;
   bool _priorWideState = true;
   bool? _wasWide;
@@ -34,6 +35,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool? _filterMap;
   bool? _filterLyrics;
   bool? _filterProfile;
+  String _currentSortMode = 'Date Modified'; // default to newest updated first as requested
 
   @override
   void initState() {
@@ -84,24 +86,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildSidebar() {
+  Widget _buildSidebar(BuildContext context, bool isWide) {
     return Container(
       width: 250,
       color: VoxProTheme.sidebar,
       child: Column(
         children: [
           const SizedBox(height: 16),
-          _buildSidebarItem(Icons.library_music, 'Library', 0),
-          _buildSidebarItem(Icons.mic, 'Active Session', 1),
+          _buildSidebarItem(context, isWide, Icons.library_music, 'Library', 0),
+          _buildSidebarItem(context, isWide, Icons.mic, 'Active Session', 1),
           const Spacer(),
-          _buildSidebarItem(Icons.settings, 'Settings', 2, isDialog: true),
+          _buildSidebarItem(context, isWide, Icons.settings, 'Settings', 2, isDialog: true),
           const SizedBox(height: 16),
         ],
       ),
     );
   }
 
-  Widget _buildSidebarItem(IconData icon, String title, int index, {bool isDialog = false}) {
+  Widget _buildSidebarItem(BuildContext context, bool isWide, IconData icon, String title, int index, {bool isDialog = false}) {
     final isActive = !isDialog && _selectedIndex == index;
     return ListTile(
       leading: Icon(icon, color: isActive ? VoxProTheme.accent : VoxProTheme.textSecondary),
@@ -114,6 +116,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       selected: isActive,
       onTap: () {
+        if (!isWide) {
+          Navigator.pop(context); // Close drawer
+        }
         if (isDialog && index == 2) {
           showDialog(
             context: context,
@@ -369,50 +374,63 @@ class _DashboardScreenState extends State<DashboardScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.all(24.0),
+          padding: EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 12.0 : 24.0),
           child: Column(
             children: [
-              Wrap(
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 16,
-                runSpacing: 8,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Song Library', style: Theme.of(context).textTheme.headlineMedium),
+                      Expanded(
+                        child: Text(
+                          'Song Library',
+                          style: MediaQuery.of(context).size.width < 600
+                              ? const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: VoxProTheme.textPrimary)
+                              : Theme.of(context).textTheme.headlineMedium,
+                        ),
+                      ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: Icon(_isListView ? Icons.grid_view : Icons.view_list),
+                            onPressed: () {
+                              setState(() {
+                                _isListView = !_isListView;
+                              });
+                            },
+                            tooltip: 'Toggle View',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                          const SizedBox(width: 16),
+                          IconButton(
+                            icon: const Icon(Icons.refresh),
+                            onPressed: () => service.scanDirectory(),
+                            tooltip: 'Refresh Library',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                          const SizedBox(width: 16),
+                          IconButton(
+                            icon: const Icon(Icons.folder_open),
+                            onPressed: () => service.pickDirectory(),
+                            tooltip: 'Change Directory',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
-                  Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      Text(
-                        service.currentDirectory!,
-                        style: const TextStyle(color: VoxProTheme.textSecondary, fontSize: 12),
-                      ),
-                      IconButton(
-                        icon: Icon(_isListView ? Icons.grid_view : Icons.view_list),
-                        onPressed: () {
-                          setState(() {
-                            _isListView = !_isListView;
-                          });
-                        },
-                        tooltip: 'Toggle View',
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.refresh),
-                        onPressed: () => service.scanDirectory(),
-                        tooltip: 'Refresh Library',
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.folder_open),
-                        onPressed: () => service.pickDirectory(),
-                        tooltip: 'Change Directory',
-                      ),
-                    ],
+                  const SizedBox(height: 8),
+                  Text(
+                    service.currentDirectory!,
+                    style: const TextStyle(color: VoxProTheme.textSecondary, fontSize: 12),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
@@ -434,16 +452,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              Wrap(
-                spacing: 8.0,
-                runSpacing: 4.0,
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _buildTriStateChip('Vocals', _filterVocals, (v) => setState(() => _filterVocals = v), VoxProTheme.vocalAccent),
+                    const SizedBox(width: 8),
+                    _buildTriStateChip('Instrumental', _filterInst, (v) => setState(() => _filterInst = v), VoxProTheme.instAccent),
+                    const SizedBox(width: 8),
+                    _buildTriStateChip('Pitch', _filterPitch, (v) => setState(() => _filterPitch = v), VoxProTheme.pitchAccent),
+                    const SizedBox(width: 8),
+                    _buildTriStateChip('Map', _filterMap, (v) => setState(() => _filterMap = v), VoxProTheme.mapAccent),
+                    const SizedBox(width: 8),
+                    _buildTriStateChip('Lyrics', _filterLyrics, (v) => setState(() => _filterLyrics = v), VoxProTheme.lyricsAccent),
+                    const SizedBox(width: 8),
+                    _buildTriStateChip('Profile', _filterProfile, (v) => setState(() => _filterProfile = v), VoxProTheme.accent),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
                 children: [
-                  _buildTriStateChip('Vocals', _filterVocals, (v) => setState(() => _filterVocals = v), VoxProTheme.vocalAccent),
-                  _buildTriStateChip('Instrumental', _filterInst, (v) => setState(() => _filterInst = v), VoxProTheme.instAccent),
-                  _buildTriStateChip('Pitch', _filterPitch, (v) => setState(() => _filterPitch = v), VoxProTheme.pitchAccent),
-                  _buildTriStateChip('Map', _filterMap, (v) => setState(() => _filterMap = v), VoxProTheme.mapAccent),
-                  _buildTriStateChip('Lyrics', _filterLyrics, (v) => setState(() => _filterLyrics = v), VoxProTheme.lyricsAccent),
-                  _buildTriStateChip('Profile', _filterProfile, (v) => setState(() => _filterProfile = v), VoxProTheme.accent),
+                  const Text('Sort by:', style: TextStyle(color: VoxProTheme.textSecondary, fontSize: 13)),
+                  const SizedBox(width: 8),
+                  DropdownButton<String>(
+                    value: _currentSortMode,
+                    dropdownColor: VoxProTheme.cardBg,
+                    style: const TextStyle(color: VoxProTheme.textPrimary, fontSize: 13),
+                    underline: const SizedBox(),
+                    items: ['Title', 'Date Modified'].map((String value) {
+                      return DropdownMenuItem<String>(
+                        value: value,
+                        child: Text(value),
+                      );
+                    }).toList(),
+                    onChanged: (String? newValue) {
+                      if (newValue != null && newValue != _currentSortMode) {
+                        setState(() {
+                          _currentSortMode = newValue;
+                        });
+                      }
+                    },
+                  ),
                 ],
               ),
             ],
@@ -473,30 +523,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
             if (_filterProfile == true) filteredSongs = filteredSongs.where((s) => s.hasPerformanceProfile).toList();
             if (_filterProfile == false) filteredSongs = filteredSongs.where((s) => !s.hasPerformanceProfile).toList();
                 
-            if (filteredSongs.isEmpty) {
-              return const Center(child: Text('No songs found', style: TextStyle(color: VoxProTheme.textSecondary)));
+            if (_currentSortMode == 'Title') {
+              filteredSongs.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+            } else if (_currentSortMode == 'Date Modified') {
+              filteredSongs.sort((a, b) {
+                if (a.dateModified == null && b.dateModified == null) return 0;
+                if (a.dateModified == null) return 1;
+                if (b.dateModified == null) return -1;
+                return b.dateModified!.compareTo(a.dateModified!); // Descending
+              });
             }
-            
-            Widget listWidget = _isListView
-                ? ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                    itemCount: filteredSongs.length,
-                    itemBuilder: (context, index) {
-                      final song = filteredSongs[index];
-                      return SongListTile(
-                        song: song,
-                        onTap: () {
-                          setState(() {
-                            _selectedSong = song;
-                            _selectedIndex = 1;
-                          });
-                        },
-                        onReprocess: _showReprocessDialog,
-                        onRemove: () => service.removeFromLibrary(song.id),
-                        onRename: () => _showRenameDialog(context, song),
-                      );
-                    },
-                  )
+
+            Widget listWidget;
+            if (filteredSongs.isEmpty) {
+              listWidget = const Center(child: Text('No songs found', style: TextStyle(color: VoxProTheme.textSecondary)));
+            } else {
+              listWidget = _isListView
+                  ? ListView.builder(
+                      padding: EdgeInsets.symmetric(horizontal: MediaQuery.of(context).size.width < 600 ? 12.0 : 24.0),
+                      itemCount: filteredSongs.length,
+                      itemBuilder: (context, index) {
+                        final song = filteredSongs[index];
+                        return SongListTile(
+                          song: song,
+                          onTap: () {
+                            setState(() {
+                              _selectedSong = song;
+                              _selectedIndex = 1;
+                            });
+                          },
+                          onReprocess: _showReprocessDialog,
+                          onRemove: () => service.removeFromLibrary(song.id),
+                          onRename: () => _showRenameDialog(context, song),
+                        );
+                      },
+                    )
                   : LayoutBuilder(
                       builder: (context, constraints) {
                         int crossAxisCount = 3;
@@ -505,7 +566,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         else if (constraints.maxWidth > 1400) crossAxisCount = 4;
                         
                         return GridView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                          padding: EdgeInsets.symmetric(horizontal: constraints.maxWidth < 600 ? 12.0 : 24.0),
                           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: crossAxisCount,
                             childAspectRatio: 0.8,
@@ -531,12 +592,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         );
                       },
                     );
+            }
 
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Padding(
-                  padding: const EdgeInsets.only(left: 24.0, right: 24.0, bottom: 8.0),
+                  padding: const EdgeInsets.only(left: 12.0, right: 12.0, bottom: 8.0),
                   child: Text(
                     '${filteredSongs.length} songs found',
                     style: const TextStyle(color: VoxProTheme.textSecondary, fontSize: 13, fontWeight: FontWeight.bold),
@@ -570,10 +632,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     
     return AiQueueNotificationListener(
       child: Scaffold(
-        appBar: AppBar(
+        drawer: (!isWide && !_isFullScreen) ? Drawer(child: _buildSidebar(context, isWide)) : null,
+        appBar: _isFullScreen ? null : AppBar(
         backgroundColor: VoxProTheme.sidebar,
         elevation: 0,
-        leading: IconButton(
+        leading: isWide ? IconButton(
           icon: const Icon(Icons.menu),
           color: VoxProTheme.textPrimary,
           onPressed: () {
@@ -585,6 +648,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             });
           },
           tooltip: 'Toggle Sidebar',
+        ) : Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu),
+            color: VoxProTheme.textPrimary,
+            onPressed: () => Scaffold.of(context).openDrawer(),
+            tooltip: 'Open Menu',
+          ),
         ),
         title: const Text(
           'KARAOKE MAKER',
@@ -626,13 +696,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
           AnimatedSize(
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeInOut,
-            child: _isSidebarOpen ? _buildSidebar() : const SizedBox.shrink(),
+            child: (isWide && _isSidebarOpen && !_isFullScreen) ? _buildSidebar(context, isWide) : const SizedBox.shrink(),
           ),
-          if (_isSidebarOpen) const VerticalDivider(width: 1, color: VoxProTheme.border),
+          if (isWide && _isSidebarOpen && !_isFullScreen) const VerticalDivider(width: 1, color: VoxProTheme.border),
           Expanded(
             child: _selectedIndex == 1 
                 ? ActiveSessionScreen(
                     selectedSong: _selectedSong,
+                    isFullScreen: _isFullScreen,
+                    onToggleFullScreen: () {
+                      setState(() {
+                        _isFullScreen = !_isFullScreen;
+                      });
+                    },
                     onSongSwitched: (newSong) {
                       setState(() {
                         _selectedSong = newSong;
@@ -643,7 +719,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ],
       )),
-      floatingActionButton: _selectedIndex == 0 ? (screenWidth < 600 ? FloatingActionButton(
+      floatingActionButton: (_selectedIndex == 0 && !_isFullScreen) ? (screenWidth < 600 ? FloatingActionButton(
         onPressed: () {
           Navigator.push(
             context,

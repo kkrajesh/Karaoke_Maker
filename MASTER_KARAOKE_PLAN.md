@@ -133,8 +133,8 @@ This project is executed in **Linear Incremental Phases**. Each phase must be ve
 - [x] After playing a song from Library, playing a youtube video plays both youtube video as well as the library vocals in the background.
 - [] AI Song generation - title standardaization is not accurate. Example: the AI log is showing "[Finalize] Task Millennium_Musics_____Namukku_Parkkan__1781318942164 migrated to AI_Vault successfully.", but the library is showing results as "പവിഴം പോൽ പവിഴാധരം | Namukku Parkkan Munthiri Thoppukal | Video Song | Mohan Lal Hits Johnson Master". I want the library and AI Vault to use standard song tiltle, preferably in english. The core engine should take care of this.
 - [x] ability to rename songs in the AI Library and reflect that changes in the AI Valult across the synced platforms. This need to factor in the segmens, and medleys that uses the existing songs and do not break them
-
-
+- [x] Improve mobile landscape viewing experience by adding full screen modes, collapsible controls, and optimizing font sizes.
+- [x] Fix empty library handling on mobile when local database has not ingested items natively yet.
 
 ---
 

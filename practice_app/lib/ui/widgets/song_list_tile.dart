@@ -50,12 +50,15 @@ class SongListTile extends StatelessWidget {
         color: VoxProTheme.cardBg,
         margin: const EdgeInsets.only(bottom: 8.0),
         child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 0.0),
+          visualDensity: VisualDensity.compact,
           title: Row(
             children: [
               Expanded(
                 child: Text(
                   song.title,
                   style: TextStyle(
+                    fontSize: 14,
                     fontWeight: FontWeight.bold,
                     color: song.isMissing ? Colors.redAccent : VoxProTheme.textPrimary,
                     decoration: song.isMissing ? TextDecoration.lineThrough : null,

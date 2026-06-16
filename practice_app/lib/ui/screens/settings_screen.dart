@@ -243,6 +243,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const TabBar(
+                isScrollable: true,
+                tabAlignment: TabAlignment.start,
                 indicatorColor: VoxProTheme.accent,
                 labelColor: VoxProTheme.accent,
                 unselectedLabelColor: VoxProTheme.textSecondary,
