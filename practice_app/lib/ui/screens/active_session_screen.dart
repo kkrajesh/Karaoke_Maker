@@ -231,12 +231,44 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                                   ? const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: VoxProTheme.textPrimary)
                                   : Theme.of(context).textTheme.headlineMedium,
                             ),
-                            if (widget.onToggleFullScreen != null)
-                              IconButton(
-                                icon: const Icon(Icons.fullscreen, color: VoxProTheme.textSecondary),
-                                onPressed: widget.onToggleFullScreen,
-                                tooltip: 'Full Screen Mode',
-                              ),
+                            Row(
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.skip_previous, color: VoxProTheme.textSecondary),
+                                  onPressed: () {
+                                    if (widget.selectedSong == null || widget.onSongSwitched == null) return;
+                                    final service = Provider.of<FileExplorerService>(context, listen: false);
+                                    final songs = service.songs;
+                                    if (songs.isEmpty) return;
+                                    final currentIndex = songs.indexWhere((s) => s.id == widget.selectedSong!.id);
+                                    if (currentIndex > 0) {
+                                      widget.onSongSwitched!(songs[currentIndex - 1]);
+                                    }
+                                  },
+                                  tooltip: 'Previous Song',
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.skip_next, color: VoxProTheme.textSecondary),
+                                  onPressed: () {
+                                    if (widget.selectedSong == null || widget.onSongSwitched == null) return;
+                                    final service = Provider.of<FileExplorerService>(context, listen: false);
+                                    final songs = service.songs;
+                                    if (songs.isEmpty) return;
+                                    final currentIndex = songs.indexWhere((s) => s.id == widget.selectedSong!.id);
+                                    if (currentIndex >= 0 && currentIndex < songs.length - 1) {
+                                      widget.onSongSwitched!(songs[currentIndex + 1]);
+                                    }
+                                  },
+                                  tooltip: 'Next Song',
+                                ),
+                                if (widget.onToggleFullScreen != null)
+                                  IconButton(
+                                    icon: const Icon(Icons.fullscreen, color: VoxProTheme.textSecondary),
+                                    onPressed: widget.onToggleFullScreen,
+                                    tooltip: 'Full Screen Mode',
+                                  ),
+                              ],
+                            ),
                           ],
                         ),
                   const SizedBox(height: 4),

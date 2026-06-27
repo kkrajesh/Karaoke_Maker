@@ -360,6 +360,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.8.0"
+  inditrans:
+    dependency: "direct main"
+    description:
+      name: inditrans
+      sha256: ea6f5e77344ec07884e347c490ccaef70fa9ab53c98a6180be7007fcff723cc3
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.12.1"
   jni:
     dependency: transitive
     description:
@@ -1021,6 +1029,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.1.9"
+  universal_ffi:
+    dependency: transitive
+    description:
+      name: universal_ffi
+      sha256: a4071511e11b96fc741a91f89dd6891ffce196c45e85f89983beb31cde695dee
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.5.0"
   universal_platform:
     dependency: transitive
     description:
@@ -1131,7 +1147,7 @@ packages:
       path: "../../vox_player_core"
       relative: true
     source: path
-    version: "0.4.8"
+    version: "0.4.9"
   wakelock_plus:
     dependency: transitive
     description:
@@ -1148,6 +1164,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.5.1"
+  wasm_ffi:
+    dependency: transitive
+    description:
+      name: wasm_ffi
+      sha256: "950238f09e2d18b85c5c4356833a06319b049c1d19f936db32c3f0d8194e30b5"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.3.0"
   web:
     dependency: transitive
     description:

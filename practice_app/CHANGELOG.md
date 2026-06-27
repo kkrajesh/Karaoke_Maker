@@ -1,3 +1,8 @@
+## 1.6.0+1
+- Added skip previous and next buttons to the active session screen.
+- Added batch rename and AI metadata features.
+- Updated dependencies (vox_player_core to 0.5.0).
+
 ## 1.5.9+1
 - Pulled in `vox_player_core` 0.4.9 which includes a collapsible controls panel.
 - Fixed UI text scaling and added a Full Screen toggle to `ActiveSessionScreen` to maximize landscape viewing area on mobile devices.
@@ -17,3 +22,4 @@
 * Added support to automatically recall saved YouTube sequences from the AI Vault.
 * Updated FileExplorerService to ingest and filter YouTube videos with saved performance profiles.
 * Fixed an issue where switching back to a YouTube video bypassed profile loading.
+

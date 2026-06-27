@@ -11,6 +11,8 @@ import 'settings_screen.dart';
 import '../widgets/song_card.dart';
 import '../widgets/song_list_tile.dart';
 import 'package:vox_player_core/vox_player_core.dart';
+import 'batch_rename_screen.dart';
+import '../../services/metadata_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -232,8 +234,107 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  void _showRenameDialog(BuildContext context, Song song) {
-    final TextEditingController titleController = TextEditingController(text: song.title);
+  void _showRenameDialog(BuildContext context, Song song) async {
+    final parts = song.title.split('|').map((e) => e.trim()).toList();
+    
+    String title = song.title;
+    String album = '';
+    String year = '';
+    String artist = '';
+    
+    // Quick parse if perfectly formatted
+    if (parts.length >= 4 && RegExp(r'^\d{4}$').hasMatch(parts[2])) {
+       title = parts[0];
+       album = parts[1];
+       year = parts[2];
+       artist = parts[3];
+    } else {
+       // Look up on web
+       final webData = await MetadataService.searchMetadata(song.title);
+       if (webData != null) {
+          title = webData.title;
+          album = webData.album;
+          year = webData.year;
+          artist = webData.artist;
+       } else {
+         // Smart Extract Heuristics Logic
+         String clean = song.title.replaceAll('_', ' ');
+       
+       clean = clean.replaceAll(RegExp(r'Full.*?Audio', caseSensitive: false), ' ');
+       clean = clean.replaceAll(RegExp(r'High\s*def.*', caseSensitive: false), ' ');
+       clean = clean.replaceAll(RegExp(r'with.*?Audio', caseSensitive: false), ' ');
+       clean = clean.replaceAll(RegExp(r'\b(HD|4K|1080p|720p|Official Video|Lyrical Video|Karaoke|गाने के बोल|Lyrical|Lyrics|Audio Song|Video Song|Music Video)\b', caseSensitive: false), ' ');
+       clean = clean.replaceAll(RegExp(r'\bSong\b', caseSensitive: false), ' ');
+       
+       final smartParts = clean.split('|').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+       if (smartParts.length > 1) {
+          title = smartParts[0].replaceAll(RegExp(r'\s+'), ' ').trim();
+          int albumIndex = 1;
+          
+          final indianScriptReg = RegExp(r'[\u0900-\u0D7F]');
+          if (smartParts.length > 2 && indianScriptReg.hasMatch(smartParts[1]) && !indianScriptReg.hasMatch(smartParts[0])) {
+            albumIndex = 2; // Skip native title
+          } else {
+            final dashParts = title.split('-');
+            if (dashParts.length > 1 && indianScriptReg.hasMatch(dashParts[1])) {
+               title = dashParts[0].trim();
+            }
+          }
+          
+          if (smartParts.length > albumIndex) {
+             album = smartParts[albumIndex];
+          }
+          if (smartParts.length > albumIndex + 1) {
+             artist = smartParts.sublist(albumIndex + 1).where((e) => e.isNotEmpty).join(', ');
+          }
+       } else {
+         final dashParts = clean.split('-');
+         if (dashParts.length > 1) {
+           artist = dashParts[0].trim().replaceAll(RegExp(r'\s+'), ' ');
+           title = dashParts[1].trim().replaceAll(RegExp(r'\s+'), ' ');
+         } else {
+           title = clean.trim().replaceAll(RegExp(r'\s+'), ' ');
+         }
+       }
+       
+       title = title.replaceAll(RegExp(r'-\s*$'), '').trim();
+       
+       final bracketReg = RegExp(r'\[(.*?)\]');
+       final parenReg = RegExp(r'\((.*?)\)');
+       final brackets = bracketReg.allMatches(song.title).map((m) => m.group(1) ?? '').toList();
+       final parens = parenReg.allMatches(song.title).map((m) => m.group(1) ?? '').toList();
+       
+       for (final b in [...brackets, ...parens]) {
+         if (RegExp(r'^\d{4}$').hasMatch(b.trim())) {
+           year = b.trim();
+         } else if (b.trim().isNotEmpty && album.isEmpty) {
+           album = b.trim();
+         }
+       }
+       
+       title = title.replaceAll(bracketReg, ' ').replaceAll(parenReg, ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+       
+       String toTitleCase(String text) {
+         if (text.isEmpty) return text;
+         return text.split(' ').map((word) {
+           if (word.isEmpty) return word;
+           return word[0].toUpperCase() + word.substring(1).toLowerCase();
+         }).join(' ');
+       }
+       
+       title = toTitleCase(title);
+       album = toTitleCase(album);
+       artist = toTitleCase(artist);
+       }
+    }
+
+    // Since this is async now, check if context is still mounted
+    if (!context.mounted) return;
+
+    final TextEditingController titleController = TextEditingController(text: title);
+    final TextEditingController albumController = TextEditingController(text: album);
+    final TextEditingController yearController = TextEditingController(text: year);
+    final TextEditingController artistController = TextEditingController(text: artist);
     
     showDialog(
       context: context,
@@ -241,14 +342,51 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return AlertDialog(
           backgroundColor: VoxProTheme.cardBg,
           title: const Text('Rename Song', style: TextStyle(color: VoxProTheme.accent)),
-          content: TextField(
-            controller: titleController,
-            style: const TextStyle(color: VoxProTheme.textPrimary),
-            decoration: const InputDecoration(
-              labelText: 'New Title',
-              labelStyle: TextStyle(color: VoxProTheme.textSecondary),
-              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: VoxProTheme.border)),
-              focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: VoxProTheme.accent)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: titleController,
+                  style: const TextStyle(color: VoxProTheme.textPrimary),
+                  decoration: const InputDecoration(
+                    labelText: 'Song Title',
+                    labelStyle: TextStyle(color: VoxProTheme.textSecondary),
+                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: VoxProTheme.border)),
+                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: VoxProTheme.accent)),
+                  ),
+                ),
+                TextField(
+                  controller: albumController,
+                  style: const TextStyle(color: VoxProTheme.textPrimary),
+                  decoration: const InputDecoration(
+                    labelText: 'Album / Movie',
+                    labelStyle: TextStyle(color: VoxProTheme.textSecondary),
+                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: VoxProTheme.border)),
+                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: VoxProTheme.accent)),
+                  ),
+                ),
+                TextField(
+                  controller: yearController,
+                  style: const TextStyle(color: VoxProTheme.textPrimary),
+                  decoration: const InputDecoration(
+                    labelText: 'Year',
+                    labelStyle: TextStyle(color: VoxProTheme.textSecondary),
+                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: VoxProTheme.border)),
+                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: VoxProTheme.accent)),
+                  ),
+                ),
+                TextField(
+                  controller: artistController,
+                  style: const TextStyle(color: VoxProTheme.textPrimary),
+                  decoration: const InputDecoration(
+                    labelText: 'Artist(s)',
+                    labelStyle: TextStyle(color: VoxProTheme.textSecondary),
+                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: VoxProTheme.border)),
+                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: VoxProTheme.accent)),
+                  ),
+                ),
+              ],
             ),
           ),
           actions: [
@@ -258,7 +396,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             ElevatedButton(
               onPressed: () async {
-                final newTitle = titleController.text.trim();
+                final newTitle = '${titleController.text.trim()} | ${albumController.text.trim()} | ${yearController.text.trim()} | ${artistController.text.trim()}';
                 if (newTitle.isNotEmpty && newTitle != song.title) {
                   Navigator.pop(context);
                   final service = Provider.of<FileExplorerService>(context, listen: false);
@@ -271,7 +409,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 }
               },
               style: ElevatedButton.styleFrom(backgroundColor: VoxProTheme.accent),
-              child: const Text('Rename', style: TextStyle(color: VoxProTheme.background)),
+              child: const Text('Save', style: TextStyle(color: VoxProTheme.background)),
             ),
           ],
         );
@@ -410,6 +548,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             icon: const Icon(Icons.refresh),
                             onPressed: () => service.scanDirectory(),
                             tooltip: 'Refresh Library',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                          const SizedBox(width: 16),
+                          IconButton(
+                            icon: const Icon(Icons.drive_file_rename_outline),
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (context) => const BatchRenameScreen()),
+                              ).then((_) => service.scanDirectory());
+                            },
+                            tooltip: 'Batch Rename Songs',
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(),
                           ),

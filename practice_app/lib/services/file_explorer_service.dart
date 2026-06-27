@@ -15,43 +15,20 @@ class FileExplorerService extends ChangeNotifier {
     VoxSettingsService.instance.initFuture.then((_) {
       scanDirectory();
     });
+    
+    VoxQueueManager.instance.onTaskCompleted.listen((task) {
+      if (task['status'] == 'completed') {
+        scanDirectory(); // Refresh the library
+      }
+    });
   }
 
-  void trackTask(String taskId, String songId, String title, ScaffoldMessengerState messenger) async {
-    activeTasks[taskId] = title;
-    notifyListeners();
+  void trackTask(String taskId, String songId, String title, ScaffoldMessengerState messenger) {
+    VoxQueueManager.instance.trackExistingTask(taskId, title, songId);
     
     messenger.showSnackBar(
       SnackBar(content: Text('Processing "$title" in background...')),
     );
-
-    bool done = false;
-    while (!done) {
-      await Future.delayed(const Duration(seconds: 3));
-      try {
-        final status = await VoxApiService.getStatus(taskId);
-        if (status['status'] == 'completed') {
-          done = true;
-          activeTasks.remove(taskId);
-          
-          await VoxAiTrackingService.instance.ingestProcessedFiles(songId, title);
-          
-          scanDirectory(); // Refresh the library
-          messenger.showSnackBar(
-            SnackBar(content: Text('✅ "$title" processing complete!')),
-          );
-        } else if (status['status'] == 'failed') {
-          done = true;
-          activeTasks.remove(taskId);
-          messenger.showSnackBar(
-            SnackBar(content: Text('❌ "$title" failed: ${status['error']}')),
-          );
-        }
-      } catch (e) {
-        // Keep polling
-      }
-    }
-    notifyListeners();
   }
 
   // Pick directory is obsolete in Phase 9, but we keep the signature so UI doesn't break instantly
@@ -104,6 +81,7 @@ class FileExplorerService extends ChangeNotifier {
         final dirs = vaultDir.listSync().whereType<Directory>();
         for (final dir in dirs) {
           final dirName = dir.path.split(Platform.pathSeparator).last;
+          if (dirName.startsWith('.')) continue; // Ignore .tmp and other hidden folders
           
           String mmId = '';
           String title = dirName;
