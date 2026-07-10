@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../models/song.dart';
 import '../theme/voxpro_theme.dart';
@@ -19,6 +20,20 @@ class SongListTile extends StatelessWidget {
     this.onRemove,
     this.onRename,
   }) : super(key: key);
+
+  Future<void> _openFolder(String path) async {
+    try {
+      if (Platform.isWindows) {
+        await Process.run('explorer', [path]);
+      } else if (Platform.isMacOS) {
+        await Process.run('open', [path]);
+      } else if (Platform.isLinux) {
+        await Process.run('xdg-open', [path]);
+      }
+    } catch (e) {
+      debugPrint('Error opening folder: $e');
+    }
+  }
 
   Widget _buildComponentChip(BuildContext context, String label, String component, bool exists) {
     Widget child = Padding(
@@ -123,6 +138,12 @@ class SongListTile extends StatelessWidget {
                   icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
                   onPressed: onRemove,
                   tooltip: 'Remove from Database',
+                ),
+              if (!song.isMissing)
+                IconButton(
+                  icon: const Icon(Icons.folder_open, color: VoxProTheme.accent),
+                  onPressed: () => _openFolder(song.directoryPath),
+                  tooltip: 'Open Folder',
                 ),
               if (!song.isMissing)
                 const Icon(Icons.play_circle_fill, color: VoxProTheme.accent),

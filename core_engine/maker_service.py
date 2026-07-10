@@ -280,7 +280,7 @@ class MakerService:
                 
         return True
 
-    def process_specific_song(self, song_id, url=None, local_audio_path=None, lyrics_text=None, lyrics_type="txt", target_dir_override=None, skip_audio=False, progress_callback=None, force_reprocess_audio=False, force_reprocess_lyrics=False, force_redownload_audio=False):
+    def process_specific_song(self, song_id, url=None, local_audio_path=None, lyrics_text=None, lyrics_type="txt", target_dir_override=None, skip_audio=False, progress_callback=None, force_reprocess_audio=False, force_reprocess_lyrics=False, force_redownload_audio=False, search_query=None):
         """API workflow: Takes a specific source and lyrics, and processes them."""
         import concurrent.futures
         target_dir = target_dir_override if target_dir_override else os.path.join(self.hot_zone, song_id)
@@ -321,7 +321,7 @@ class MakerService:
                         elif msg.startswith("[INFO] LyricAgent: Detected language"):
                             progress_callback(msg.replace("[INFO] LyricAgent: ", ""))
                     
-                query = song_id.replace("_", " ")
+                query = search_query if search_query else song_id.replace("_", " ")
                 agent.process_lyrics(
                     target_dir=target_dir,
                     query=query,

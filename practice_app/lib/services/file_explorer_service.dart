@@ -17,7 +17,7 @@ class FileExplorerService extends ChangeNotifier {
     });
     
     VoxQueueManager.instance.onTaskCompleted.listen((task) {
-      if (task['status'] == 'completed') {
+      if (task['status'] == 'completed' || task['status'] == 'done') {
         scanDirectory(); // Refresh the library
       }
     });

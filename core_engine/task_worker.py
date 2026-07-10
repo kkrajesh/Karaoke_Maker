@@ -44,11 +44,18 @@ def main():
         clean_title = task_title
         clean_id = task.get("cleanId", "")
         
-        if task_title and not clean_title:
+        if task_title and not clean_id:
             try:
-                from core_engine.agents.lyric_agent import LyricAgent
-                agent = LyricAgent()
-                clean_title = agent.clean_song_query(task_title)
+                from core_engine.metadata_service import MetadataService
+                meta = MetadataService.search_metadata(task_title)
+                if meta:
+                    clean_title = f"{meta.title} | {meta.album} | {meta.year} | {meta.artist}".strip(' |')
+                    clean_title = ' | '.join([p.strip() for p in clean_title.split('|')]) # Normalize spacing
+                else:
+                    from core_engine.agents.lyric_agent import LyricAgent
+                    agent = LyricAgent()
+                    clean_title = agent.clean_song_query(task_title)
+                    
                 clean_id = sanitize_filename(clean_title)
                 # Update orchestrator with clean info
                 requests.patch(f"{base_url}/internal/queue/{task_id}", json={"clean_title": clean_title, "clean_id": clean_id}, timeout=2)
@@ -73,7 +80,8 @@ def main():
         lyrics_type = task.get("lyricsType", "txt")
         local_path = None
         
-        if task.get("sourceType", "").lower() == "localdirectory":
+        source_type = task.get("sourceType") or ""
+        if source_type.lower() == "localdirectory":
             local_path = url
             url = None
             
@@ -90,7 +98,7 @@ def main():
             else:
                 update_progress(f"Failed to find web audio for {search_query}")
                 
-        if task.get("sourceType", "").lower() == "medley":
+        if source_type.lower() == "medley":
             update_progress("Initiating Medley Generation...")
             medley_def = json.loads(task.get("url", "{}"))
             success = maker.generate_medley(medley_def, progress_callback=update_progress)
@@ -128,7 +136,8 @@ def main():
             progress_callback=update_progress,
             force_reprocess_audio=force_audio,
             force_reprocess_lyrics=force_lyrics,
-            force_redownload_audio=force_redownload
+            force_redownload_audio=force_redownload,
+            search_query=task_title
         )
         
         final_status = "done" if success else "failed"

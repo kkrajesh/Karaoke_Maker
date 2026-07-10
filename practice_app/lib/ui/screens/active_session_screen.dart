@@ -13,6 +13,7 @@ class ActiveSessionScreen extends StatefulWidget {
   final Function(Song)? onSongSwitched;
   final VoidCallback? onToggleSidebar;
   final bool isFullScreen;
+  final bool isTv;
   final VoidCallback? onToggleFullScreen;
 
   const ActiveSessionScreen({
@@ -21,6 +22,7 @@ class ActiveSessionScreen extends StatefulWidget {
     this.onSongSwitched,
     this.onToggleSidebar,
     this.isFullScreen = false,
+    this.isTv = false,
     this.onToggleFullScreen,
   }) : super(key: key);
 
@@ -78,7 +80,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
     // Check if YouTube
     if (song.directoryPath.startsWith('http')) {
       String lyricsDir = '';
-      if (song.mmId != null && song.mmId!.isNotEmpty) {
+      if (song.mmId != null && song.mmId!.isNotEmpty && !song.mmId!.startsWith('UNKNOWN_')) {
         final aiService = VoxAiTrackingService.instance;
         lyricsDir = aiService.getArtifactDirectory(song.mmId!, song.title);
         _performanceProfile = await PerformanceProfileService.loadProfile(lyricsDir);
@@ -100,7 +102,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
     String lyricsDir;
     String vocalsPath;
 
-    if (song.mmId != null && song.mmId!.isNotEmpty) {
+    if (song.mmId != null && song.mmId!.isNotEmpty && !song.mmId!.startsWith('UNKNOWN_')) {
       final aiService = VoxAiTrackingService.instance;
       instPath = aiService.getInstrumentalPath(song.mmId!, song.title);
       pitchPath = aiService.getPitchDataPath(song.mmId!, song.title);
@@ -165,9 +167,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
     }
     
     // Load lyrics
-    if (song.hasNativeLyrics || song.hasEnglishLyrics) {
-      _songLyrics = await LyricsParser.parse(lyricsDir);
-    }
+    _songLyrics = await LyricsParser.parse(lyricsDir);
     
     // Load Performance Profile
     _performanceProfile = await PerformanceProfileService.loadProfile(lyricsDir);
@@ -392,7 +392,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
             child: Builder(
               builder: (context) {
                 String finalDirPath = _currentLyricsDir ?? widget.selectedSong!.directoryPath;
-                if (widget.selectedSong != null && widget.selectedSong!.mmId != null && widget.selectedSong!.mmId!.isNotEmpty) {
+                if (widget.selectedSong != null && widget.selectedSong!.mmId != null && widget.selectedSong!.mmId!.isNotEmpty && !widget.selectedSong!.mmId!.startsWith('UNKNOWN_')) {
                   finalDirPath = VoxAiTrackingService.instance.getArtifactDirectory(widget.selectedSong!.mmId!, widget.selectedSong!.title);
                 }
                 
@@ -416,7 +416,9 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                     _currentPitch = pitch;
                     _currentTempo = tempo;
                   },
-                  config: VoxDashboardConfig.practiceMode(),
+                  config: (widget.isFullScreen && widget.isTv) 
+                      ? VoxDashboardConfig.tvFullScreen()
+                      : VoxDashboardConfig.practiceMode(),
                 );
               }
             ),

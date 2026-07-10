@@ -22,6 +22,7 @@ env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 load_dotenv(dotenv_path=env_path)
 
 from core_engine.maker_service import MakerService
+from core_engine.metadata_service import MetadataService
 from core_engine.agents.lyric_agent import LyricAgent
 from core_engine.config import get_mm_db_path
 
@@ -54,7 +55,22 @@ def init_db():
             clean_title TEXT,
             fetch_original_audio INTEGER,
             force_reprocess INTEGER DEFAULT 0,
+            reprocess_component TEXT DEFAULT 'all',
+            original_title TEXT,
             logs TEXT
+        )
+    ''')
+    
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS ai_artifacts (
+            mm_id TEXT PRIMARY KEY,
+            title TEXT,
+            has_vocals INTEGER,
+            has_instrumental INTEGER,
+            has_pitch_data INTEGER,
+            has_vocal_map INTEGER,
+            has_lyrics INTEGER,
+            last_processed TEXT
         )
     ''')
     
@@ -68,12 +84,20 @@ def init_db():
         c.execute("ALTER TABLE queue_items ADD COLUMN reprocess_component TEXT DEFAULT 'all'")
     except sqlite3.OperationalError:
         pass
+        
+    try:
+        c.execute("ALTER TABLE queue_items ADD COLUMN original_title TEXT")
+    except sqlite3.OperationalError:
+        pass
     
     # Reset any stuck tasks from a previous run
     c.execute("UPDATE queue_items SET status='failed', status_text='Worker crashed or server restarted' WHERE status='processing' OR status='pending'")
     
     conn.commit()
     conn.close()
+
+# Initialize DB synchronously on module load to guarantee table exists
+init_db()
 
 # Connection Manager for WebSockets
 class ConnectionManager:
@@ -150,6 +174,7 @@ def row_to_dict(row, cursor):
         "fetchOriginalAudio": bool(d.get("fetch_original_audio")),
         "forceReprocess": bool(d.get("force_reprocess")),
         "reprocessComponent": d.get("reprocess_component", "all"),
+        "originalTitle": d.get("original_title"),
         "logs": d.get("logs")
     }
 
@@ -277,6 +302,13 @@ def fetch_lyrics(q: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/standardize-title")
+def standardize_title(q: str):
+    meta = MetadataService.search_metadata(q)
+    if meta:
+        return meta.to_dict()
+    return {}
+
 # ---- Queue Endpoints ----
 @app.get("/queue")
 def get_queue():
@@ -310,22 +342,30 @@ async def enqueue_task_internal(item: QueueItemCreate):
     row = c.fetchone()
     if row:
         status = row[0]
-        if status in ['pending', 'processing', 'done']:
+        if status in ['pending', 'processing']:
             return None
         else:
             c.execute('DELETE FROM queue_items WHERE id = ?', (item.id,))
             
+    # Perform intelligent standardization
+    original_title = item.title
+    meta = MetadataService.search_metadata(original_title)
+    if meta:
+        item.title = " | ".join(filter(None, [meta.title, meta.album, meta.year, meta.artist]))
+        if meta.artist:
+            item.artist = meta.artist
+
     c.execute('''
-        INSERT INTO queue_items (id, title, artist, url, source_type, status, status_text, lyrics_text, lyrics_type, fetch_original_audio, force_reprocess, reprocess_component, logs)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (item.id, item.title, item.artist, item.url, item.sourceType, 'pending', 'Queued', item.lyricsText, item.lyricsType, int(item.fetchOriginalAudio), int(item.forceReprocess), item.reprocessComponent, '[]'))
+        INSERT INTO queue_items (id, title, artist, url, source_type, status, status_text, lyrics_text, lyrics_type, fetch_original_audio, force_reprocess, reprocess_component, original_title, logs)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (item.id, item.title, item.artist, item.url, item.sourceType, 'pending', 'Queued', item.lyricsText, item.lyricsType, int(item.fetchOriginalAudio), int(item.forceReprocess), item.reprocessComponent, original_title, '[]'))
     conn.commit()
     conn.close()
     
     await manager.broadcast({"action": "add", "item": {
         "id": item.id, "title": item.title, "artist": item.artist, "url": item.url, 
         "sourceType": item.sourceType, "status": "pending", "statusText": "Queued",
-        "fetchOriginalAudio": item.fetchOriginalAudio, "logs": []
+        "fetchOriginalAudio": item.fetchOriginalAudio, "originalTitle": original_title, "logs": []
     }})
     return item.id
 
@@ -475,17 +515,43 @@ def finalize_artifact(task_id: str):
         return
         
     # Determine Vault Path
-    if task_id == clean_title_str or task_id == final_title:
-        folder_name = task_id
-        prefix = task_id
-    else:
-        folder_name = f"{task_id}_{clean_title_str}"
-        prefix = f"{task_id}_{clean_title_str}"
+    vault_dir = None
+    folder_name = None
+    prefix = None
+    
+    for d in os.listdir(AI_VAULT):
+        if os.path.isdir(os.path.join(AI_VAULT, d)) and (d == task_id or d.startswith(f"{task_id}_")):
+            folder_name = d
+            prefix = d
+            vault_dir = os.path.join(AI_VAULT, d)
+            break
+            
+    if not vault_dir:
+        if task_id == clean_title_str or task_id == final_title:
+            folder_name = task_id
+            prefix = task_id
+        else:
+            folder_name = f"{task_id}_{clean_title_str}"
+            prefix = f"{task_id}_{clean_title_str}"
+        vault_dir = os.path.join(AI_VAULT, folder_name)
         
-    vault_dir = os.path.join(AI_VAULT, folder_name)
     os.makedirs(vault_dir, exist_ok=True)
     
     has_inst = has_voc = has_pitch = has_map = has_lyr = 0
+    
+    # Preserve existing artifact flags from vox_meta.json
+    meta_json_path = os.path.join(vault_dir, 'vox_meta.json')
+    if os.path.exists(meta_json_path):
+        try:
+            with open(meta_json_path, 'r', encoding='utf-8') as f:
+                existing = json.load(f)
+            has_inst = int(existing.get('has_instrumental', 0))
+            has_voc = int(existing.get('has_vocals', 0))
+            has_pitch = int(existing.get('has_pitch_data', 0))
+            has_map = int(existing.get('has_vocal_map', 0))
+            has_lyr = int(existing.get('has_lyrics', 0))
+        except Exception:
+            pass
     
     # Move files
     try:

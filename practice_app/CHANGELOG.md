@@ -1,3 +1,9 @@
+## 1.6.1+1
+- Unified search integrations and UI refinements.
+- Core backend orchestrator updates for medley generation, queue items tracking, and async processing.
+- Pulled in `vox_player_core` 0.5.1 containing UI bug fixes for `UNKNOWN_` prefixed songs and song library navigation.
+- Added various Python engine fixes for file tracking and error resilience.
+
 ## 1.6.0+1
 - Added skip previous and next buttons to the active session screen.
 - Added batch rename and AI metadata features.

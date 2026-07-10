@@ -13,13 +13,13 @@ The system is composed of two primary layers:
 
 ### Technology Stack
 * **Language**: Python 3.10+
-* **Framework**: Flask (REST API)
+* **Framework**: FastAPI (REST & WebSockets)
 * **Audio Processing**: Demucs (Vocal separation), Librosa & Crepe (Pitch Tracking), FFmpeg
 * **Web Scraping/APIs**: `yt-dlp` (Audio downloading), `duckduckgo_search` & BeautifulSoup (Web scraping), LRCLib & Genius APIs.
 * **LLM Integration**: OpenAI Python Client (Configured for Local/Remote LLMs to handle transliteration and poetic meaning).
 
 ### Architecture & Key Components
-* **`api_server.py`**: The Flask entry point. Exposes endpoints to trigger asynchronous processing tasks (`/process`, `/reprocess`, `/batch_process`) and check status (`/status/<task_id>`).
+* **`karaoke_orchestrator.py`**: The FastAPI entry point. Exposes REST endpoints (`/queue`, `/reprocess`, etc.) and WebSockets for real-time AI Queue syncing and status tracking. Replaces the legacy Flask implementation.
 * **`maker_service.py`**: The central orchestrator. It manages the pipeline: acquiring audio -> running Demucs -> running Pitch Analysis -> generating Vocal Activity Maps -> calling `LyricAgent`.
 * **`agents/audio_agent.py`**: Uses `yt-dlp` to search YouTube/Music domains and download the highest quality audio, standardizing it to `.wav`.
 * **`agents/lyric_agent.py`**: A complex, multi-fallback agent. It attempts to find synced (`.lrc`) or unsynced (`.txt`) lyrics via LRCLib, Genius, DuckDuckGo, or YouTube descriptions. If lyrics are in a native script (e.g., Hindi/Devanagari), it strictly transliterates them into the Latin alphabet (Manglish/Hinglish) using an LLM. It also generates a `lyrics_meaning.txt` file summarizing the poetic meaning.
@@ -28,7 +28,7 @@ The system is composed of two primary layers:
 * **`run_demucs.py`**: A custom wrapper for the `htdemucs` model that bypasses missing `torchcodec` dependencies to successfully split the audio into `vocals.wav` and `instrumental.wav`.
 
 ### Data Structure (SQLite & AI Vault)
-Processed songs are stored in a designated AI Vault directory. The system no longer relies on brittle folder-name scanning. Instead, `vox_ai_db.dart` (using `sqflite_common_ffi`) securely maps MediaMonkey DB IDs to specific AI Artifact folders.
+Processed songs are stored in a designated AI Vault directory. The system no longer relies on brittle folder-name scanning. Instead, `vox_ai_db.dart` (using `sqflite_common_ffi`) securely maps MediaMonkey DB IDs to specific AI Artifact folders. The Python backend tracks tasks in `queue_items` table in `vox_ai_queue.db`.
 A fully processed song folder contains:
 * `original.wav` - The raw downloaded audio.
 * `vocals.wav` - Isolated vocal track.
@@ -54,6 +54,7 @@ A fully processed song folder contains:
 
 ### Key Screens
 * **`DashboardScreen` (`dashboard_screen.dart`)**: The main library view. It displays a list of MediaMonkey songs. It leverages `vox_player_core` for intelligent search filtering.
+* **`MedleyBuilderScreen` & `MedleyActiveSessionScreen` (inside `vox_player_core`)**: Screens for orchestrating, previewing, and modifying multi-song sequence medleys.
 * **`AiQueueManagerUi` (inside `vox_player_core`)**: The robust background queue management UI that handles ingestion requests to the Python API server.
 * **`ActiveSessionScreen` (`active_session_screen.dart`)**: The wrapper that passes selected MediaMonkey songs into the `VoxPlayerDashboard` widget from the core library, supplying it with stems, lyrics, and pitch data.
 * **`SettingsScreen` (`settings_screen.dart`)**: Engineered as a non-interrupting Modal Dialog rather than a full page route, ensuring that modifying global app settings (like pitch curve colors) does not tear down active practice sessions or audio/lyric engines.

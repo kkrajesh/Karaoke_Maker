@@ -11,6 +11,7 @@ import 'settings_screen.dart';
 import '../widgets/song_card.dart';
 import '../widgets/song_list_tile.dart';
 import 'package:vox_player_core/vox_player_core.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'batch_rename_screen.dart';
 import '../../services/metadata_service.dart';
 
@@ -22,7 +23,9 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  int _selectedIndex = 0;
+  int _selectedIndex = 1; // Default to Library (1) for non-TV
+  bool _isInit = false;
+  bool _isTv = false;
   Song? _selectedSong;
   bool _isListView = true;
   String _searchQuery = '';
@@ -42,6 +45,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
+    _initDevice();
+  }
+
+  Future<void> _initDevice() async {
+    if (Platform.isAndroid) {
+      final deviceInfo = DeviceInfoPlugin();
+      final androidInfo = await deviceInfo.androidInfo;
+      _isTv = androidInfo.systemFeatures.contains('android.software.leanback');
+    }
+    if (mounted) {
+      setState(() {
+        if (_isTv) {
+          _selectedIndex = 0; // Search by default on TV
+          _isFullScreen = true; // Full screen by default on TV
+        } else {
+          _selectedIndex = 1; // Library
+        }
+        _isInit = true;
+      });
+    }
     _requestAndroidPermissions();
   }
 
@@ -95,10 +118,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Column(
         children: [
           const SizedBox(height: 16),
-          _buildSidebarItem(context, isWide, Icons.library_music, 'Library', 0),
-          _buildSidebarItem(context, isWide, Icons.mic, 'Active Session', 1),
+          _buildSidebarItem(context, isWide, Icons.search, 'Search', 0),
+          _buildSidebarItem(context, isWide, Icons.library_music, 'Library', 1),
+          _buildSidebarItem(context, isWide, Icons.mic, 'Active Session', 2),
           const Spacer(),
-          _buildSidebarItem(context, isWide, Icons.settings, 'Settings', 2, isDialog: true),
+          _buildSidebarItem(context, isWide, Icons.settings, 'Settings', 3, isDialog: true),
           const SizedBox(height: 16),
         ],
       ),
@@ -121,7 +145,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (!isWide) {
           Navigator.pop(context); // Close drawer
         }
-        if (isDialog && index == 2) {
+        if (isDialog && index == 3) {
           showDialog(
             context: context,
             builder: (context) => const SettingsScreen(),
@@ -417,10 +441,60 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  void _showUnifiedSearch() {
+  Widget _buildUnifiedSearchBody({bool isDialog = false}) {
     final service = Provider.of<FileExplorerService>(context, listen: false);
-    final localPath = service.currentDirectory ?? 'C:\\'; // default if none selected
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: UnifiedSearchUI(
+        initialActiveProviders: _isTv ? ['youtube'] : null, // Assuming UnifiedSearchUI supports this, or we handle it inside
+        providers: [
+          DartYouTubeSearchProvider(),
+          MediaMonkeySearchProvider(prioritizeLocal: true),
+          AiVaultSearchProvider(),
+        ],
+        actionBuilder: (context, result) {
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AiQueueButton(result: result, isVisible: true),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: VoxProTheme.vocalAccent),
+                onPressed: () {
+                  if (result.sourceType != 'youtube') {
+                    final foundSong = service.songs.firstWhere(
+                      (s) => result.url != null && result.url!.startsWith(s.directoryPath),
+                      orElse: () => Song(title: result.title, directoryPath: result.url ?? ''),
+                    );
+                    setState(() {
+                      _selectedSong = foundSong;
+                      _selectedIndex = 2; // Active Session is now 2
+                    });
+                    if (isDialog) {
+                      Navigator.pop(context);
+                    }
+                  } else {
+                     setState(() {
+                       final url = result.url ?? '';
+                       final ytId = RegExp(r'(?:v=|/)([0-9A-Za-z_-]{11}).*').firstMatch(url)?.group(1) ?? '';
+                       _selectedSong = Song(title: result.title, directoryPath: url, mmId: ytId.isNotEmpty ? 'YT_$ytId' : null);
+                       _selectedIndex = 2;
+                     });
+                     if (isDialog) {
+                       Navigator.pop(context);
+                     }
+                  }
+                },
+                child: const Text('Play', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 
+  void _showUnifiedSearch() {
     showDialog(
       context: context,
       builder: (context) {
@@ -430,47 +504,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Container(
             width: 800,
             height: 600,
-            padding: const EdgeInsets.all(16),
-            child: UnifiedSearchUI(
-              providers: [
-                DartYouTubeSearchProvider(),
-                MediaMonkeySearchProvider(prioritizeLocal: true),
-                AiVaultSearchProvider(),
-              ],
-              actionBuilder: (context, result) {
-                return Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    AiQueueButton(result: result, isVisible: true),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: VoxProTheme.vocalAccent),
-                      onPressed: () {
-                        Navigator.pop(context); // close dialog
-                        if (result.sourceType != 'youtube') {
-                          final foundSong = service.songs.firstWhere(
-                            (s) => result.url != null && result.url!.startsWith(s.directoryPath),
-                            orElse: () => Song(title: result.title, directoryPath: result.url ?? ''),
-                          );
-                          setState(() {
-                            _selectedSong = foundSong;
-                            _selectedIndex = 1;
-                          });
-                        } else {
-                           setState(() {
-                             final url = result.url ?? '';
-                             final ytId = RegExp(r'(?:v=|/)([0-9A-Za-z_-]{11}).*').firstMatch(url)?.group(1) ?? '';
-                             _selectedSong = Song(title: result.title, directoryPath: url, mmId: ytId.isNotEmpty ? 'YT_$ytId' : null);
-                             _selectedIndex = 1;
-                           });
-                        }
-                      },
-                      child: const Text('Play', style: TextStyle(color: Colors.white)),
-                    ),
-                  ],
-                );
-              },
-            ),
+            child: _buildUnifiedSearchBody(isDialog: true),
           ),
         );
       },
@@ -700,7 +734,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           onTap: () {
                             setState(() {
                               _selectedSong = song;
-                              _selectedIndex = 1;
+                              _selectedIndex = 2;
                             });
                           },
                           onReprocess: _showReprocessDialog,
@@ -732,7 +766,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               onTap: () {
                                 setState(() {
                                   _selectedSong = song;
-                                  _selectedIndex = 1;
+                                  _selectedIndex = 2;
                                 });
                               },
                               onRemove: () => service.removeFromLibrary(song.id),
@@ -851,26 +885,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           if (isWide && _isSidebarOpen && !_isFullScreen) const VerticalDivider(width: 1, color: VoxProTheme.border),
           Expanded(
-            child: _selectedIndex == 1 
-                ? ActiveSessionScreen(
-                    selectedSong: _selectedSong,
-                    isFullScreen: _isFullScreen,
-                    onToggleFullScreen: () {
-                      setState(() {
-                        _isFullScreen = !_isFullScreen;
-                      });
-                    },
-                    onSongSwitched: (newSong) {
-                      setState(() {
-                        _selectedSong = newSong;
-                      });
-                    },
-                  )
-                : _buildLibraryView(service),
+            child: !_isInit ? const Center(child: CircularProgressIndicator()) : (_selectedIndex == 0
+                ? _buildUnifiedSearchBody()
+                : _selectedIndex == 2
+                    ? ActiveSessionScreen(
+                        selectedSong: _selectedSong,
+                        isFullScreen: _isFullScreen,
+                        isTv: _isTv,
+                        onToggleFullScreen: () {
+                          setState(() {
+                            _isFullScreen = !_isFullScreen;
+                          });
+                        },
+                        onSongSwitched: (newSong) {
+                          setState(() {
+                            _selectedSong = newSong;
+                          });
+                        },
+                      )
+                    : _buildLibraryView(service)),
           ),
         ],
       )),
-      floatingActionButton: (_selectedIndex == 0 && !_isFullScreen) ? (screenWidth < 600 ? FloatingActionButton(
+      floatingActionButton: (_selectedIndex == 1 && !_isFullScreen) ? (screenWidth < 600 ? FloatingActionButton(
         onPressed: () {
           Navigator.push(
             context,
