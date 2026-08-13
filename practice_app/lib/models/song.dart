@@ -2,6 +2,7 @@ import 'dart:io';
 
 class Song {
   final String title;
+  final String artist;
   final String directoryPath;
   final bool hasInstrumental;
   final bool hasVocals;
@@ -18,6 +19,7 @@ class Song {
 
   Song({
     required this.title,
+    this.artist = 'Unknown Artist',
     required this.directoryPath,
     this.hasInstrumental = false,
     this.hasVocals = false,
@@ -37,6 +39,7 @@ class Song {
 
     return Song(
       title: title,
+      artist: 'Unknown Artist',
       directoryPath: dir.path,
       hasInstrumental: files.any((f) => f.contains('instrumental.wav')),
       hasVocals: files.any((f) => f.contains('vocals.wav')),

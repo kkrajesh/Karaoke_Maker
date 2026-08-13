@@ -17,7 +17,7 @@ class FileExplorerService extends ChangeNotifier {
     });
     
     VoxQueueManager.instance.onTaskCompleted.listen((task) {
-      if (task['status'] == 'completed' || task['status'] == 'done') {
+      if (task['status'] == 'completed' || task['status'] == 'done' || task['status'] == 'audio_ready' || task['status'] == 'audioReady') {
         scanDirectory(); // Refresh the library
       }
     });
@@ -82,6 +82,7 @@ class FileExplorerService extends ChangeNotifier {
         for (final dir in dirs) {
           final dirName = dir.path.split(Platform.pathSeparator).last;
           if (dirName.startsWith('.')) continue; // Ignore .tmp and other hidden folders
+          if (dirName.toLowerCase() == 'playlists' || dirName.toLowerCase() == 'playlist') continue; // Ignore Playlists folder
           
           String mmId = '';
           String title = dirName;
@@ -96,8 +97,13 @@ class FileExplorerService extends ChangeNotifier {
                mmId = parts[0];
                title = parts.sublist(1).join('_');
              } else {
-               mmId = 'UNKNOWN_$dirName';
-               title = dirName;
+               if (dirName.startsWith('UNKNOWN_')) {
+                 mmId = dirName;
+                 title = dirName.substring(8);
+               } else {
+                 mmId = 'UNKNOWN_$dirName';
+                 title = dirName;
+               }
              }
           }
 

@@ -116,6 +116,7 @@ This project is executed in **Linear Incremental Phases**. Each phase must be ve
     5. **COMPLETED:** Ability to adjust the vocals volume for practice. This intelligently handles 'Both' mode by automatically mixing the guide vocals at an adjustable volume (default 50%).
     6. Advanced: Ability to create a medley by picking segments from multiple songs and creating a new song with those segments in order. 
     7. **COMPLETED:** Ability to save the segments for youtube videos and preserve it for later. Mapped and loaded reliably using the YouTube ID via the AI Vault indexing system.
+    8. **COMPLETED:** Added robust Playlist Management features allowing grouping of songs into active playlists and navigating seamlessly through the active session.
 
 
 

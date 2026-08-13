@@ -14,6 +14,7 @@ import 'package:vox_player_core/vox_player_core.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'batch_rename_screen.dart';
 import '../../services/metadata_service.dart';
+import 'package:vox_player_core/vox_player_core.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -31,7 +32,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _searchQuery = '';
   
   bool _isFullScreen = false;
-  bool _isSidebarOpen = false;
+  bool _isPinned = true;
+  bool _isHoveringSidebar = false;
+  bool _isHoveringMenuIcon = false;
   bool _priorWideState = true;
   bool? _wasWide;
   bool? _filterVocals;
@@ -41,6 +44,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool? _filterLyrics;
   bool? _filterProfile;
   String _currentSortMode = 'Date Modified'; // default to newest updated first as requested
+  
+  Playlist? _editingPlaylist;
+  Playlist? _activePlaylist;
+
+  void _addToPlaylist(Song song) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return SelectPlaylistDialog(
+          itemToAdd: PlaylistItem(
+            songId: song.mmId ?? song.id,
+            source: 'vault',
+            title: song.title,
+            artist: song.artist,
+            directoryPath: song.directoryPath,
+          ),
+        );
+      },
+    );
+  }
 
   @override
   void initState() {
@@ -112,19 +135,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildSidebar(BuildContext context, bool isWide) {
-    return Container(
-      width: 250,
-      color: VoxProTheme.sidebar,
-      child: Column(
-        children: [
-          const SizedBox(height: 16),
-          _buildSidebarItem(context, isWide, Icons.search, 'Search', 0),
-          _buildSidebarItem(context, isWide, Icons.library_music, 'Library', 1),
-          _buildSidebarItem(context, isWide, Icons.mic, 'Active Session', 2),
-          const Spacer(),
-          _buildSidebarItem(context, isWide, Icons.settings, 'Settings', 3, isDialog: true),
-          const SizedBox(height: 16),
-        ],
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHoveringSidebar = true),
+      onExit: (_) => setState(() => _isHoveringSidebar = false),
+      child: Container(
+        width: 250,
+        color: VoxProTheme.sidebar,
+        child: Column(
+          children: [
+            const SizedBox(height: 16),
+            _buildSidebarItem(context, isWide, Icons.search, 'Search', 0),
+            _buildSidebarItem(context, isWide, Icons.library_music, 'Library', 1),
+            _buildSidebarItem(context, isWide, Icons.featured_play_list, 'Playlists', 4),
+            _buildSidebarItem(context, isWide, Icons.mic, 'Active Session', 2),
+            _buildSidebarItem(context, isWide, Icons.timer, 'Sleep Timer', 5, isDialog: true),
+            const Spacer(),
+            _buildSidebarItem(context, isWide, Icons.settings, 'Settings', 3, isDialog: true),
+            const SizedBox(height: 16),
+          ],
+        ),
       ),
     );
   }
@@ -152,9 +181,63 @@ class _DashboardScreenState extends State<DashboardScreen> {
           );
           return;
         }
+        if (isDialog && index == 5) {
+          _showSleepTimerDialog(context);
+          return;
+        }
         setState(() {
           _selectedIndex = index;
         });
+      },
+    );
+  }
+
+  void _showSleepTimerDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: VoxProTheme.cardBg,
+          title: const Text('Sleep Timer', style: TextStyle(color: VoxProTheme.accent)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: const Text('15 Minutes', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  SleepTimerService.instance.startTimer(const Duration(minutes: 15));
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sleep timer set for 15 minutes')));
+                },
+              ),
+              ListTile(
+                title: const Text('30 Minutes', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  SleepTimerService.instance.startTimer(const Duration(minutes: 30));
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sleep timer set for 30 minutes')));
+                },
+              ),
+              ListTile(
+                title: const Text('60 Minutes', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  SleepTimerService.instance.startTimer(const Duration(minutes: 60));
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sleep timer set for 60 minutes')));
+                },
+              ),
+              const Divider(color: VoxProTheme.border),
+              ListTile(
+                title: const Text('Cancel Timer', style: TextStyle(color: Colors.redAccent)),
+                onTap: () {
+                  SleepTimerService.instance.cancelTimer();
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sleep timer cancelled')));
+                },
+              ),
+            ],
+          ),
+        );
       },
     );
   }
@@ -456,6 +539,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
           return Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              IconButton(
+                icon: const Icon(Icons.playlist_add, color: Colors.white70),
+                tooltip: 'Add to Playlist',
+                onPressed: () {
+                  final ytId = RegExp(r'(?:v=|/)([0-9A-Za-z_-]{11}).*').firstMatch(result.url ?? '')?.group(1);
+                  final isYoutube = result.sourceType == 'youtube';
+                  final songId = isYoutube ? ytId : result.id;
+                  if (songId != null && songId.isNotEmpty) {
+                    showDialog(
+                      context: context,
+                      builder: (context) {
+                        return SelectPlaylistDialog(
+                          itemToAdd: PlaylistItem(
+                            songId: songId,
+                            source: isYoutube ? 'youtube' : 'vault',
+                            title: result.title,
+                            artist: result.artist ?? 'Unknown Artist',
+                            directoryPath: result.url,
+                          ),
+                        );
+                      },
+                    );
+                  }
+                },
+              ),
+              const SizedBox(width: 8),
               AiQueueButton(result: result, isVisible: true),
               const SizedBox(width: 8),
               ElevatedButton(
@@ -740,6 +849,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           onReprocess: _showReprocessDialog,
                           onRemove: () => service.removeFromLibrary(song.id),
                           onRename: () => _showRenameDialog(context, song),
+                          onAddToPlaylist: () => _addToPlaylist(song),
                         );
                       },
                     )
@@ -772,6 +882,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               onRemove: () => service.removeFromLibrary(song.id),
                               onReprocess: _showReprocessDialog,
                               onRename: () => _showRenameDialog(context, song),
+                              onAddToPlaylist: () => _addToPlaylist(song),
                             );
                           },
                         );
@@ -805,12 +916,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final isWide = screenWidth > 800;
     
     if (_wasWide == null) {
-      _isSidebarOpen = isWide;
+      _isPinned = isWide;
     } else {
       if (_wasWide! && !isWide) {
-        _isSidebarOpen = false;
+        _isPinned = false;
       } else if (!_wasWide! && isWide) {
-        _isSidebarOpen = _priorWideState;
+        _isPinned = _priorWideState;
       }
     }
     _wasWide = isWide;
@@ -821,18 +932,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
         appBar: _isFullScreen ? null : AppBar(
         backgroundColor: VoxProTheme.sidebar,
         elevation: 0,
-        leading: isWide ? IconButton(
-          icon: const Icon(Icons.menu),
-          color: VoxProTheme.textPrimary,
-          onPressed: () {
-            setState(() {
-              _isSidebarOpen = !_isSidebarOpen;
-              if (isWide) {
-                _priorWideState = _isSidebarOpen;
-              }
-            });
-          },
-          tooltip: 'Toggle Sidebar',
+        leading: isWide ? MouseRegion(
+          onEnter: (_) => setState(() => _isHoveringMenuIcon = true),
+          onExit: (_) => setState(() => _isHoveringMenuIcon = false),
+          child: IconButton(
+            icon: Icon(_isPinned ? Icons.push_pin : Icons.menu),
+            color: VoxProTheme.textPrimary,
+            onPressed: () {
+              setState(() {
+                _isPinned = !_isPinned;
+                if (isWide) {
+                  _priorWideState = _isPinned;
+                }
+              });
+            },
+            tooltip: _isPinned ? 'Unpin Sidebar' : 'Pin Sidebar',
+          ),
         ) : Builder(
           builder: (context) => IconButton(
             icon: const Icon(Icons.menu),
@@ -876,37 +991,68 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
       body: SafeArea(
-        child: Row(
+        child: Stack(
           children: [
-          AnimatedSize(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeInOut,
-            child: (isWide && _isSidebarOpen && !_isFullScreen) ? _buildSidebar(context, isWide) : const SizedBox.shrink(),
-          ),
-          if (isWide && _isSidebarOpen && !_isFullScreen) const VerticalDivider(width: 1, color: VoxProTheme.border),
-          Expanded(
-            child: !_isInit ? const Center(child: CircularProgressIndicator()) : (_selectedIndex == 0
-                ? _buildUnifiedSearchBody()
-                : _selectedIndex == 2
-                    ? ActiveSessionScreen(
-                        selectedSong: _selectedSong,
-                        isFullScreen: _isFullScreen,
-                        isTv: _isTv,
-                        onToggleFullScreen: () {
-                          setState(() {
-                            _isFullScreen = !_isFullScreen;
-                          });
-                        },
-                        onSongSwitched: (newSong) {
-                          setState(() {
-                            _selectedSong = newSong;
-                          });
-                        },
-                      )
-                    : _buildLibraryView(service)),
-          ),
-        ],
-      )),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeInOut,
+                  child: (isWide && _isPinned && !_isFullScreen) ? const SizedBox(width: 250) : const SizedBox.shrink(),
+                ),
+                if (isWide && _isPinned && !_isFullScreen) const VerticalDivider(width: 1, color: VoxProTheme.border),
+                Expanded(
+                  child: !_isInit ? const Center(child: CircularProgressIndicator()) : (_selectedIndex == 0
+                      ? _buildUnifiedSearchBody()
+                      : _selectedIndex == 2
+                          ? ActiveSessionScreen(
+                              selectedSong: _selectedSong,
+                              activePlaylist: _activePlaylist,
+                              isFullScreen: _isFullScreen,
+                              isTv: _isTv,
+                              onToggleFullScreen: () {
+                                setState(() {
+                                  _isFullScreen = !_isFullScreen;
+                                });
+                              },
+                              onSongSwitched: (newSong) {
+                                setState(() {
+                                  _selectedSong = newSong;
+                                });
+                              },
+                            )
+                          : _selectedIndex == 4
+                              ? (_editingPlaylist != null
+                                  ? PlaylistEditorScreen(
+                                      playlist: _editingPlaylist!,
+                                      onBack: () => setState(() => _editingPlaylist = null),
+                                    )
+                                  : PlaylistManagerScreen(
+                                      onPlay: (p) {
+                                        setState(() {
+                                          _activePlaylist = p;
+                                          _selectedIndex = 2; // Jump to active session
+                                        });
+                                      },
+                                      onEdit: (p) => setState(() => _editingPlaylist = p),
+                                    ))
+                              : _buildLibraryView(service)),
+                ),
+              ],
+            ),
+            if (isWide && !_isFullScreen)
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeInOut,
+                left: (_isPinned || _isHoveringSidebar || _isHoveringMenuIcon) ? 0 : -250,
+                top: 0,
+                bottom: 0,
+                child: _buildSidebar(context, isWide),
+              ),
+          ],
+        )
+      ),
       floatingActionButton: (_selectedIndex == 1 && !_isFullScreen) ? (screenWidth < 600 ? FloatingActionButton(
         onPressed: () {
           Navigator.push(

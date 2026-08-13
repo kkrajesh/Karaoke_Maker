@@ -159,10 +159,14 @@ class MakerService:
                 self.embed_metadata(target_mp3, actual_url)
                 return True, actual_url
             else:
-                self.log(song_id, f"[ERROR] Download failed, original.wav not found.")
+                err_msg = "[ERROR] Download failed, original.wav not found."
+                self.log(song_id, err_msg)
+                if progress_callback: progress_callback(err_msg)
                 return False, None
         except Exception as e:
-            self.log(song_id, f"[ERROR] yt-dlp extraction failed: {e}")
+            err_msg = f"[ERROR] yt-dlp extraction failed: {e}"
+            self.log(song_id, err_msg)
+            if progress_callback: progress_callback(err_msg)
             return False, None
 
     def search_and_download_audio(self, song_query, target_dir, progress_callback=None):
@@ -253,6 +257,15 @@ class MakerService:
         else:
             self.log(song_id, f"[INFO] vocals.wav and instrumental.wav already exist. Skipping Demucs separation.")
             
+        return True
+
+    def analyze_audio_features(self, song_id, progress_callback=None):
+        """Runs Pitch Analysis and Vocal Activity Map generation after stems are ready."""
+        target_dir = os.path.join(self.hot_zone, song_id)
+        final_vocals = os.path.join(target_dir, "vocals.wav")
+        pitch_json_path = os.path.join(target_dir, "pitch_profile.json")
+        vocal_map_path = os.path.join(target_dir, "vocal_map.json")
+
         # --- 2. Pitch Analysis (Phase 2) ---
         if os.path.exists(final_vocals) and not os.path.exists(pitch_json_path):
             if progress_callback: progress_callback("Analyzing Pitch...")
@@ -267,7 +280,6 @@ class MakerService:
             self.log(song_id, f"[INFO] pitch_profile.json already exists. Skipping Pitch Analysis.")
 
         # --- 3. Vocal Activity Map ---
-        vocal_map_path = os.path.join(target_dir, "vocal_map.json")
         if os.path.exists(final_vocals) and not os.path.exists(vocal_map_path):
             if progress_callback: progress_callback("Analyzing Vocal Activity...")
             self.log(song_id, f"[WAIT] Generating Vocal Activity Map...")
@@ -368,6 +380,11 @@ class MakerService:
             # 3. Separate Audio & Analyze
             if audio_success:
                 audio_success = self.separate_audio(song_id, actual_url, progress_callback)
+                if audio_success and progress_callback:
+                    progress_callback("[EVENT] audio_ready")
+                
+                if audio_success:
+                    self.analyze_audio_features(song_id, progress_callback)
 
         # 4. Wait for lyrics processing to finish
         if progress_callback: progress_callback("Waiting for lyrics processing to finalize...")
@@ -407,6 +424,9 @@ class MakerService:
             return False
             
         success = self.separate_audio(song_id, actual_url)
+        if success:
+            self.analyze_audio_features(song_id)
+            
         lyric_thread.join() # Ensure lyrics are done before we declare total success
         
         if success:

@@ -8,8 +8,9 @@ class SongCard extends StatelessWidget {
   final VoidCallback? onRemove;
   final VoidCallback? onRename;
   final void Function(BuildContext, String, String, String)? onReprocess;
+  final VoidCallback? onAddToPlaylist;
 
-  const SongCard({Key? key, required this.song, required this.onTap, this.onRemove, this.onRename, this.onReprocess}) : super(key: key);
+  const SongCard({Key? key, required this.song, required this.onTap, this.onRemove, this.onRename, this.onReprocess, this.onAddToPlaylist}) : super(key: key);
 
   Widget _buildBadge(IconData icon, String label, bool active) {
     return Container(
@@ -116,6 +117,16 @@ class SongCard extends StatelessWidget {
                             const PopupMenuItem(value: 'lyrics', child: Text('Reprocess Lyrics Only')),
                             const PopupMenuItem(value: 'audio', child: Text('Reprocess Audio Only')),
                           ],
+                        ),
+                      if (!song.isMissing && onAddToPlaylist != null)
+                        const SizedBox(width: 8),
+                      if (!song.isMissing && onAddToPlaylist != null)
+                        IconButton(
+                          icon: const Icon(Icons.playlist_add, color: Colors.white70, size: 24),
+                          onPressed: onAddToPlaylist,
+                          tooltip: 'Add to Playlist',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
                         ),
                       if (onReprocess != null && song.isMissing && onRemove != null)
                         const SizedBox(width: 12),

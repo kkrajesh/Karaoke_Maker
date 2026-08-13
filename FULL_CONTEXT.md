@@ -12,7 +12,7 @@ Karaoke Maker is the engine of the Karaoke Ecosystem. It consists of a robust Py
   - **Modal Settings**: A non-interrupting overlay architecture allowing live config changes without tearing down the audio player state.
 
 ## Current Migration Phase
-We have **Completed Phase 8** of a massive architectural refactoring. The player components inside `practice_app` have been successfully extracted into a standalone package called `vox_player_core`. 
+We have **Completed Phase 9** of a massive architectural refactoring. The player components inside `practice_app` have been successfully extracted into a standalone package called `vox_player_core` which now supports Medley generation, Advanced Sequences, and native **Playlist Management**. 
 Additionally, the system now uses a robust local SQLite database (`vox_ai_metadata.db`) mapping to the MediaMonkey `MM.DB` to handle all artifact tracking, eliminating brittle folder-name parsing.
 
 ## Ecosystem Role

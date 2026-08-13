@@ -1,3 +1,8 @@
+## 1.6.2+1
+- Pulled in `vox_player_core` 0.5.2 to integrate robust Playlist Management and Sleep Timer.
+- Updated `SongCard` and `SongListTile` UI components to support adding songs to active playlists.
+- Updated core Python backend (`karaoke_orchestrator.py`, `maker_service.py`, `task_worker.py`) for enhanced workflow orchestration.
+
 ## 1.6.1+1
 - Unified search integrations and UI refinements.
 - Core backend orchestrator updates for medley generation, queue items tracking, and async processing.

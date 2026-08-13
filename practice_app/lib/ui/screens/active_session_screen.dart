@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 import '../../services/file_explorer_service.dart';
 class ActiveSessionScreen extends StatefulWidget {
   final Song? selectedSong;
+  final Playlist? activePlaylist;
   final Function(Song)? onSongSwitched;
   final VoidCallback? onToggleSidebar;
   final bool isFullScreen;
@@ -19,6 +20,7 @@ class ActiveSessionScreen extends StatefulWidget {
   const ActiveSessionScreen({
     Key? key, 
     this.selectedSong,
+    this.activePlaylist,
     this.onSongSwitched,
     this.onToggleSidebar,
     this.isFullScreen = false,
@@ -44,6 +46,28 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
   double _currentPitch = 0.0;
   double _currentTempo = 1.0;
 
+  int _playlistIndex = 0;
+  bool _isShuffle = false;
+  int _repeatMode = 0; // 0=none, 1=all, 2=one
+  bool _isHoveringPlaylist = false;
+  bool _isPlaylistPinned = false;
+
+  Song? get _currentSong {
+    if (widget.activePlaylist != null && widget.activePlaylist!.items.isNotEmpty) {
+      if (_playlistIndex >= widget.activePlaylist!.items.length) {
+        _playlistIndex = 0;
+      }
+      final item = widget.activePlaylist!.items[_playlistIndex];
+      return Song(
+        mmId: item.source == 'vault' ? item.songId : null,
+        title: item.title,
+        artist: item.artist,
+        directoryPath: item.directoryPath ?? (item.source == 'youtube' ? 'https://youtube.com/watch?v=${item.songId}' : ''),
+      );
+    }
+    return widget.selectedSong;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -53,7 +77,10 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
   @override
   void didUpdateWidget(covariant ActiveSessionScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.selectedSong != oldWidget.selectedSong) {
+    if (widget.selectedSong != oldWidget.selectedSong || widget.activePlaylist != oldWidget.activePlaylist) {
+      if (widget.activePlaylist != oldWidget.activePlaylist) {
+        _playlistIndex = 0;
+      }
       _loadSong();
     }
   }
@@ -70,12 +97,12 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
       _currentVocalsPath = null;
     });
 
-    if (widget.selectedSong == null) {
+    if (_currentSong == null) {
       setState(() => _isLoading = false);
       return;
     }
 
-    final song = widget.selectedSong!;
+    final song = _currentSong!;
     
     // Check if YouTube
     if (song.directoryPath.startsWith('http')) {
@@ -181,9 +208,38 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
     }
   }
 
+  void _handleSongFinished() {
+    if (widget.activePlaylist == null || widget.activePlaylist!.items.isEmpty) return;
+    
+    if (_repeatMode == 2) {
+      _loadSong();
+      return;
+    }
+
+    if (_isShuffle) {
+      setState(() {
+        _playlistIndex = (DateTime.now().millisecondsSinceEpoch % widget.activePlaylist!.items.length);
+        _loadSong();
+      });
+      return;
+    }
+
+    if (_playlistIndex < widget.activePlaylist!.items.length - 1) {
+      setState(() {
+        _playlistIndex++;
+        _loadSong();
+      });
+    } else if (_repeatMode == 1) {
+      setState(() {
+        _playlistIndex = 0;
+        _loadSong();
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (widget.selectedSong == null) {
+    if (_currentSong == null) {
       return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -225,17 +281,31 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              'Active Session',
-                              style: MediaQuery.of(context).size.width < 600
-                                  ? const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: VoxProTheme.textPrimary)
-                                  : Theme.of(context).textTheme.headlineMedium,
+                            Expanded(
+                              child: Text(
+                                _currentSong!.title,
+                                style: TextStyle(
+                                  color: VoxProTheme.accent,
+                                  fontSize: MediaQuery.of(context).size.width < 600 ? 16 : 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                             Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
                                   icon: const Icon(Icons.skip_previous, color: VoxProTheme.textSecondary),
                                   onPressed: () {
+                                    if (widget.activePlaylist != null) {
+                                      setState(() {
+                                        _playlistIndex = (_playlistIndex - 1) % widget.activePlaylist!.items.length;
+                                        if (_playlistIndex < 0) _playlistIndex += widget.activePlaylist!.items.length;
+                                      });
+                                      _loadSong();
+                                      return;
+                                    }
                                     if (widget.selectedSong == null || widget.onSongSwitched == null) return;
                                     final service = Provider.of<FileExplorerService>(context, listen: false);
                                     final songs = service.songs;
@@ -250,6 +320,17 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                                 IconButton(
                                   icon: const Icon(Icons.skip_next, color: VoxProTheme.textSecondary),
                                   onPressed: () {
+                                    if (widget.activePlaylist != null) {
+                                      setState(() {
+                                        if (_isShuffle) {
+                                          _playlistIndex = DateTime.now().millisecondsSinceEpoch % widget.activePlaylist!.items.length;
+                                        } else {
+                                          _playlistIndex = (_playlistIndex + 1) % widget.activePlaylist!.items.length;
+                                        }
+                                      });
+                                      _loadSong();
+                                      return;
+                                    }
                                     if (widget.selectedSong == null || widget.onSongSwitched == null) return;
                                     final service = Provider.of<FileExplorerService>(context, listen: false);
                                     final songs = service.songs;
@@ -271,32 +352,22 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                             ),
                           ],
                         ),
-                  const SizedBox(height: 4),
-                  Text(
-                    widget.selectedSong!.title,
-                    style: TextStyle(
-                      color: VoxProTheme.accent,
-                      fontSize: MediaQuery.of(context).size.width < 600 ? 16 : 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 16),
+                        const SizedBox(height: 16),
                   Builder(
                     builder: (context) {
                       final result = VoxSearchResult(
-                        id: widget.selectedSong!.id,
-                        title: widget.selectedSong!.title,
-                        artist: '',
-                        url: widget.selectedSong!.directoryPath,
-                        sourceType: widget.selectedSong!.directoryPath.startsWith('http') ? 'youtube' : 'LocalDirectory',
+                        id: _currentSong!.id,
+                        title: _currentSong!.title,
+                        artist: _currentSong!.artist,
+                        url: _currentSong!.directoryPath,
+                        sourceType: _currentSong!.directoryPath.startsWith('http') ? 'youtube' : 'LocalDirectory',
                       );
                       return SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (widget.selectedSong!.id.startsWith('UNKNOWN_'))
+                            if (_currentSong!.id.startsWith('UNKNOWN_'))
                               ElevatedButton.icon(
                                 icon: const Icon(Icons.link, size: 16),
                                 label: const Text('Link to MediaMonkey'),
@@ -306,10 +377,10 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                 ),
                                 onPressed: () {
-                                  _showLinkDialog(context, widget.selectedSong!);
+                                  _showLinkDialog(context, _currentSong!);
                                 },
                               ),
-                            if (widget.selectedSong!.id.startsWith('UNKNOWN_'))
+                            if (_currentSong!.id.startsWith('UNKNOWN_'))
                               const SizedBox(width: 8),
                             ElevatedButton.icon(
                               icon: const Icon(Icons.music_note, size: 16),
@@ -325,7 +396,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                                 );
                                 try {
                                   await VoxApiService.generatePracticeMp3s(
-                                    songId: widget.selectedSong!.id,
+                                    songId: _currentSong!.id,
                                     pitchShift: _currentPitch,
                                     tempoShift: _currentTempo,
                                   );
@@ -358,8 +429,8 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                                 );
                                 try {
                                   await VoxApiService.reprocessComponent(
-                                    songId: widget.selectedSong!.id,
-                                    title: widget.selectedSong!.title,
+                                    songId: _currentSong!.id,
+                                    title: _currentSong!.title,
                                     component: 'lyrics',
                                   );
                                   if (context.mounted) {
@@ -391,9 +462,9 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
         Expanded(
             child: Builder(
               builder: (context) {
-                String finalDirPath = _currentLyricsDir ?? widget.selectedSong!.directoryPath;
-                if (widget.selectedSong != null && widget.selectedSong!.mmId != null && widget.selectedSong!.mmId!.isNotEmpty && !widget.selectedSong!.mmId!.startsWith('UNKNOWN_')) {
-                  finalDirPath = VoxAiTrackingService.instance.getArtifactDirectory(widget.selectedSong!.mmId!, widget.selectedSong!.title);
+                String finalDirPath = _currentLyricsDir ?? _currentSong!.directoryPath;
+                if (_currentSong != null && _currentSong!.mmId != null && _currentSong!.mmId!.isNotEmpty && !_currentSong!.mmId!.startsWith('UNKNOWN_')) {
+                  finalDirPath = VoxAiTrackingService.instance.getArtifactDirectory(_currentSong!.mmId!, _currentSong!.title);
                 }
                 
                 return VoxPlayerDashboard(
@@ -404,8 +475,9 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                   directoryPath: finalDirPath,
                   vocalsPath: _currentVocalsPath,
                   performanceProfile: _performanceProfile,
+                  onFinished: _handleSongFinished,
                   onProfileSaved: (profile) {
-                    if (widget.selectedSong != null) {
+                    if (_currentSong != null) {
                       PerformanceProfileService.saveProfile(finalDirPath, profile);
                     }
                     setState(() {
@@ -439,7 +511,104 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
             tooltip: 'Exit Full Screen',
           ),
         ),
+      if (widget.activePlaylist != null && !widget.isFullScreen)
+        _buildPlaylistDrawer(),
     ]);
+  }
+
+  Widget _buildPlaylistDrawer() {
+    return AnimatedPositioned(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      right: (_isHoveringPlaylist || _isPlaylistPinned) ? 0 : -300,
+      top: 0,
+      bottom: 0,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHoveringPlaylist = true),
+        onExit: (_) => setState(() => _isHoveringPlaylist = false),
+        child: Container(
+          width: 320,
+          decoration: BoxDecoration(
+            color: VoxProTheme.sidebar.withOpacity(0.95),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.5),
+                blurRadius: 10,
+                offset: const Offset(-2, 0),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                color: VoxProTheme.background,
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Up Next', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                        IconButton(
+                          icon: Icon(_isPlaylistPinned ? Icons.push_pin : Icons.push_pin_outlined, color: _isPlaylistPinned ? VoxProTheme.accent : Colors.white54),
+                          onPressed: () => setState(() => _isPlaylistPinned = !_isPlaylistPinned),
+                          tooltip: _isPlaylistPinned ? 'Unpin Playlist' : 'Pin Playlist',
+                        ),
+                      ],
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.shuffle, color: _isShuffle ? VoxProTheme.accent : Colors.white54),
+                          onPressed: () => setState(() => _isShuffle = !_isShuffle),
+                          tooltip: 'Shuffle',
+                        ),
+                        IconButton(
+                          icon: Icon(
+                            _repeatMode == 2 ? Icons.repeat_one : Icons.repeat,
+                            color: _repeatMode > 0 ? VoxProTheme.accent : Colors.white54,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _repeatMode = (_repeatMode + 1) % 3;
+                            });
+                          },
+                          tooltip: 'Repeat',
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: widget.activePlaylist!.items.length,
+                  itemBuilder: (context, index) {
+                    final item = widget.activePlaylist!.items[index];
+                    final isPlaying = index == _playlistIndex;
+                    return ListTile(
+                      tileColor: isPlaying ? VoxProTheme.accent.withOpacity(0.2) : null,
+                      leading: isPlaying 
+                        ? const Icon(Icons.volume_up, color: VoxProTheme.accent)
+                        : Text('${index + 1}', style: const TextStyle(color: Colors.white54)),
+                      title: Text(item.title, style: TextStyle(color: isPlaying ? VoxProTheme.accent : Colors.white, fontWeight: isPlaying ? FontWeight.bold : FontWeight.normal)),
+                      subtitle: Text(item.artist, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                      onTap: () {
+                        setState(() {
+                          _playlistIndex = index;
+                          _loadSong();
+                        });
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _showLinkDialog(BuildContext context, Song song) {

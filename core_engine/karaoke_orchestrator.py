@@ -34,67 +34,73 @@ AI_VAULT = os.getenv("AI_VAULT", ".")
 DB_PATH = os.path.join(AI_VAULT, "vox_ai_metadata.db")
 
 def init_db():
-    if not os.path.exists(AI_VAULT):
-        os.makedirs(AI_VAULT, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('PRAGMA journal_mode=DELETE;')
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS queue_items (
-            id TEXT PRIMARY KEY,
-            title TEXT,
-            artist TEXT,
-            url TEXT,
-            source_type TEXT,
-            status TEXT,
-            progress REAL,
-            status_text TEXT,
-            lyrics_text TEXT,
-            lyrics_type TEXT,
-            clean_id TEXT,
-            clean_title TEXT,
-            fetch_original_audio INTEGER,
-            force_reprocess INTEGER DEFAULT 0,
-            reprocess_component TEXT DEFAULT 'all',
-            original_title TEXT,
-            logs TEXT
-        )
-    ''')
-    
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS ai_artifacts (
-            mm_id TEXT PRIMARY KEY,
-            title TEXT,
-            has_vocals INTEGER,
-            has_instrumental INTEGER,
-            has_pitch_data INTEGER,
-            has_vocal_map INTEGER,
-            has_lyrics INTEGER,
-            last_processed TEXT
-        )
-    ''')
-    
-    # Add force_reprocess column if it doesn't exist
+    print(f"[init_db] DB_PATH is {DB_PATH}")
     try:
-        c.execute("ALTER TABLE queue_items ADD COLUMN force_reprocess INTEGER DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass # Column already exists
+        if not os.path.exists(AI_VAULT):
+            os.makedirs(AI_VAULT, exist_ok=True)
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute('PRAGMA journal_mode=DELETE;')
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS queue_items (
+                id TEXT PRIMARY KEY,
+                title TEXT,
+                artist TEXT,
+                url TEXT,
+                source_type TEXT,
+                status TEXT,
+                progress REAL,
+                status_text TEXT,
+                lyrics_text TEXT,
+                lyrics_type TEXT,
+                clean_id TEXT,
+                clean_title TEXT,
+                fetch_original_audio INTEGER,
+                force_reprocess INTEGER DEFAULT 0,
+                reprocess_component TEXT DEFAULT 'all',
+                original_title TEXT,
+                logs TEXT
+            )
+        ''')
         
-    try:
-        c.execute("ALTER TABLE queue_items ADD COLUMN reprocess_component TEXT DEFAULT 'all'")
-    except sqlite3.OperationalError:
-        pass
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS ai_artifacts (
+                mm_id TEXT PRIMARY KEY,
+                title TEXT,
+                has_vocals INTEGER,
+                has_instrumental INTEGER,
+                has_pitch_data INTEGER,
+                has_vocal_map INTEGER,
+                has_lyrics INTEGER,
+                last_processed TEXT
+            )
+        ''')
         
-    try:
-        c.execute("ALTER TABLE queue_items ADD COLUMN original_title TEXT")
-    except sqlite3.OperationalError:
-        pass
-    
-    # Reset any stuck tasks from a previous run
-    c.execute("UPDATE queue_items SET status='failed', status_text='Worker crashed or server restarted' WHERE status='processing' OR status='pending'")
-    
-    conn.commit()
-    conn.close()
+        # Add force_reprocess column if it doesn't exist
+        try:
+            c.execute("ALTER TABLE queue_items ADD COLUMN force_reprocess INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass # Column already exists
+            
+        try:
+            c.execute("ALTER TABLE queue_items ADD COLUMN reprocess_component TEXT DEFAULT 'all'")
+        except sqlite3.OperationalError:
+            pass
+            
+        try:
+            c.execute("ALTER TABLE queue_items ADD COLUMN original_title TEXT")
+        except sqlite3.OperationalError:
+            pass
+        
+        # Reset any stuck tasks from a previous run
+        c.execute("UPDATE queue_items SET status='failed', status_text='Worker crashed or server restarted' WHERE status='processing' OR status='pending'")
+        
+        conn.commit()
+        conn.close()
+        print("[init_db] Successfully created tables.")
+    except Exception as e:
+        print(f"[init_db] ERROR initializing DB: {e}")
+        traceback.print_exc()
 
 # Initialize DB synchronously on module load to guarantee table exists
 init_db()
@@ -342,7 +348,7 @@ async def enqueue_task_internal(item: QueueItemCreate):
     row = c.fetchone()
     if row:
         status = row[0]
-        if status in ['pending', 'processing']:
+        if status in ['pending', 'processing', 'audio_ready']:
             return None
         else:
             c.execute('DELETE FROM queue_items WHERE id = ?', (item.id,))
@@ -486,6 +492,123 @@ import re
 def sanitize_title(title: str) -> str:
     return re.sub(r'[\\/:*?"<>|]', '', title)
 
+def partial_finalize_artifact(task_id: str):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('SELECT title, clean_title, clean_id FROM queue_items WHERE id = ?', (task_id,))
+    row = c.fetchone()
+    if not row:
+        conn.close()
+        return
+        
+    title, clean_title, clean_id = row
+    
+    # Use clean_title if available, otherwise fallback to raw title
+    final_title = clean_title if clean_title else title
+    clean_title_str = sanitize_title(final_title)
+    
+    # Locate HotZone source
+    AI_HOTZONE = os.getenv("AI_HOTZONE", "C:/Data/Rajesh/Karaoke_HotZone")
+    source_dir = os.path.join(AI_HOTZONE, task_id)
+    if not os.path.exists(source_dir) and clean_id:
+        source_dir = os.path.join(AI_HOTZONE, clean_id)
+    if not os.path.exists(source_dir) and clean_title:
+        source_dir = os.path.join(AI_HOTZONE, clean_title)
+        
+    if not os.path.exists(source_dir):
+        print(f"[PartialFinalize] Could not find HotZone files for {task_id}")
+        conn.close()
+        return
+        
+    # Determine Vault Path
+    vault_dir = None
+    folder_name = None
+    prefix = None
+    
+    for d in os.listdir(AI_VAULT):
+        if os.path.isdir(os.path.join(AI_VAULT, d)) and (d == task_id or d.startswith(f"{task_id}_")):
+            folder_name = d
+            prefix = d
+            vault_dir = os.path.join(AI_VAULT, d)
+            break
+            
+    if not vault_dir:
+        if task_id == clean_title_str or task_id == final_title:
+            folder_name = task_id
+            prefix = task_id
+        else:
+            folder_name = f"{task_id}_{clean_title_str}"
+            prefix = f"{task_id}_{clean_title_str}"
+        vault_dir = os.path.join(AI_VAULT, folder_name)
+        
+    os.makedirs(vault_dir, exist_ok=True)
+    
+    has_inst = has_voc = 0
+    
+    # Move files
+    try:
+        for filename in os.listdir(source_dir):
+            if filename in ["original.wav", "instrumental.wav", "vocals.wav"]:
+                src = os.path.join(source_dir, filename)
+                if os.path.isfile(src):
+                    new_filename = filename if filename.startswith(f"{task_id}_") else f"{task_id}_{filename}"
+                    if not filename.startswith(prefix):
+                        new_filename = f"{prefix}_{filename}"
+                    else:
+                        new_filename = filename
+                    
+                    shutil.copy2(src, os.path.join(vault_dir, new_filename))
+                    
+                    if "instrumental.wav" in filename: has_inst = 1
+                    if "vocals.wav" in filename: has_voc = 1
+                
+        # Insert artifact tracking (only update what we know, don't overwrite lyrics/pitch if they exist)
+        # We use an upsert that coalesces existing values for non-audio fields
+        c.execute('''
+            INSERT INTO ai_artifacts (mm_id, title, has_vocals, has_instrumental, has_pitch_data, has_vocal_map, has_lyrics, last_processed)
+            VALUES (?, ?, ?, ?, 0, 0, 0, CURRENT_TIMESTAMP)
+            ON CONFLICT(mm_id) DO UPDATE SET
+                has_vocals=excluded.has_vocals,
+                has_instrumental=excluded.has_instrumental,
+                last_processed=CURRENT_TIMESTAMP
+        ''', (task_id, final_title, has_voc, has_inst))
+        conn.commit()
+        
+        # Generate vox_meta.json for Flutter
+        from datetime import datetime
+        meta_json_path = os.path.join(vault_dir, 'vox_meta.json')
+        meta_data = {
+            'mm_id': task_id,
+            'title': final_title,
+            'has_vocals': has_voc,
+            'has_instrumental': has_inst,
+            'has_pitch_data': 0,
+            'has_vocal_map': 0,
+            'has_lyrics': 0,
+            'last_processed': datetime.now().isoformat()
+        }
+        
+        # If it exists, preserve pitch/lyrics fields
+        if os.path.exists(meta_json_path):
+            try:
+                with open(meta_json_path, 'r', encoding='utf-8') as f:
+                    existing = json.load(f)
+                meta_data['has_pitch_data'] = existing.get('has_pitch_data', 0)
+                meta_data['has_vocal_map'] = existing.get('has_vocal_map', 0)
+                meta_data['has_lyrics'] = existing.get('has_lyrics', 0)
+            except Exception:
+                pass
+                
+        with open(meta_json_path, 'w', encoding='utf-8') as f:
+            json.dump(meta_data, f, indent=2)
+        
+        # Do NOT cleanup HotZone
+        print(f"[PartialFinalize] Task {task_id} audio stems copied to AI_Vault.")
+    except Exception as e:
+        print(f"[PartialFinalize] Error during migration: {e}")
+        
+    conn.close()
+
 def finalize_artifact(task_id: str):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
@@ -604,6 +727,8 @@ async def update_status(task_id: str, request: Request, background_tasks: Backgr
     
     if status == "done":
         background_tasks.add_task(finalize_artifact, task_id)
+    elif status == "audio_ready":
+        background_tasks.add_task(partial_finalize_artifact, task_id)
         
     await manager.broadcast({"action": "update", "id": task_id, "status": status, "statusText": status_text})
     return {"message": "Status updated"}

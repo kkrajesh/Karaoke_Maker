@@ -24,6 +24,9 @@ def main():
     # Notify Orchestrator that task started
     def update_progress(msg):
         try:
+            if msg == "[EVENT] audio_ready":
+                requests.post(f"{base_url}/internal/queue/{task_id}/status", json={"status": "audio_ready", "status_text": "Audio Stems Ready, processing extras..."}, timeout=2)
+                return
             timestamped_msg = time.strftime("[%H:%M:%S] ") + msg
             requests.post(f"{base_url}/internal/queue/{task_id}/log", json={"message": timestamped_msg}, timeout=2)
         except Exception as e:
