@@ -39,6 +39,24 @@ def resync():
                 SET has_vocals=?, has_instrumental=?, has_pitch_data=?, has_vocal_map=?, has_lyrics=?
                 WHERE mm_id=?
             ''', (has_voc, has_inst, has_pitch, has_map, has_lyr, mm_id))
+            
+            # Update vox_meta.json as well
+            meta_path = os.path.join(vault_dir, "vox_meta.json")
+            if os.path.exists(meta_path):
+                try:
+                    import json
+                    with open(meta_path, 'r', encoding='utf-8') as f:
+                        meta = json.load(f)
+                    meta['has_vocals'] = has_voc
+                    meta['has_instrumental'] = has_inst
+                    meta['has_pitch_data'] = has_pitch
+                    meta['has_vocal_map'] = has_map
+                    meta['has_lyrics'] = has_lyr
+                    with open(meta_path, 'w', encoding='utf-8') as f:
+                        json.dump(meta, f, indent=2)
+                except Exception as e:
+                    print(f"Failed to update meta for {mm_id}: {e}")
+                    
             updated += 1
 
     conn.commit()

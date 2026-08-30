@@ -102,6 +102,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (!await Permission.microphone.isGranted) {
         await Permission.microphone.request();
       }
+      if (!await Permission.notification.isGranted) {
+        await Permission.notification.request();
+      }
       
       // Attempt a rescan now that we have permissions
       if (mounted) {

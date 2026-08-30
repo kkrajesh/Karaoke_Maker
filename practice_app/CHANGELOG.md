@@ -1,3 +1,9 @@
+## 1.6.3+1
+- Fixed the AI Vault Orchestrator bug where Pitch, Vocal Map, and Lyrics indicators were erroneously showing as missing in the UI by ensuring `vox_meta.json` is correctly finalized.
+- Updated `practice_app` to pass song metadata (title/artist) to `vox_player_core` for background notifications.
+- Added Notification permissions request in Dashboard.
+- Made the Active Session Playlist drawer responsive and added a toggle button.
+
 ## 1.6.2+1
 - Pulled in `vox_player_core` 0.5.2 to integrate robust Playlist Management and Sleep Timer.
 - Updated `SongCard` and `SongListTile` UI components to support adding songs to active playlists.

@@ -483,6 +483,8 @@ async def update_log(task_id: str, request: Request):
     conn.commit()
     conn.close()
     
+    print(f"[Worker Log | {task_id}] {msg}")
+    
     await manager.broadcast({"action": "update", "id": task_id, "statusText": msg, "log": msg, "status": status})
     return {"message": "Log updated"}
 
@@ -704,6 +706,21 @@ def finalize_artifact(task_id: str):
         ''', (task_id, final_title, has_voc, has_inst, has_pitch, has_map, has_lyr))
         conn.commit()
         
+        # Update vox_meta.json with full artifact status
+        from datetime import datetime
+        meta_data = {
+            'mm_id': task_id,
+            'title': final_title,
+            'has_vocals': has_voc,
+            'has_instrumental': has_inst,
+            'has_pitch_data': has_pitch,
+            'has_vocal_map': has_map,
+            'has_lyrics': has_lyr,
+            'last_processed': datetime.now().isoformat()
+        }
+        with open(meta_json_path, 'w', encoding='utf-8') as f:
+            json.dump(meta_data, f, indent=2)
+        
         # Cleanup HotZone
         shutil.rmtree(source_dir, ignore_errors=True)
         print(f"[Finalize] Task {task_id} migrated to AI_Vault successfully.")
@@ -724,6 +741,8 @@ async def update_status(task_id: str, request: Request, background_tasks: Backgr
               (status, status_text, task_id))
     conn.commit()
     conn.close()
+    
+    print(f"[Worker Status | {task_id}] {status}: {status_text}")
     
     if status == "done":
         background_tasks.add_task(finalize_artifact, task_id)

@@ -136,6 +136,7 @@ This project is executed in **Linear Incremental Phases**. Each phase must be ve
 - [x] ability to rename songs in the AI Library and reflect that changes in the AI Valult across the synced platforms. This need to factor in the segmens, and medleys that uses the existing songs and do not break them
 - [x] Improve mobile landscape viewing experience by adding full screen modes, collapsible controls, and optimizing font sizes.
 - [x] Fix empty library handling on mobile when local database has not ingested items natively yet.
+- [x] Fix the AI Vault Orchestrator bug where Pitch, Vocal Map, and Lyrics indicators were erroneously showing as missing in the UI.
 
 ---
 

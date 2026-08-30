@@ -53,10 +53,10 @@ A fully processed song folder contains:
 * **`lib/services/file_explorer_service.dart`**: Scans the MediaMonkey DB and queries the `VoxAiTrackingService` to see which songs have AI artifacts available.
 
 ### Key Screens
-* **`DashboardScreen` (`dashboard_screen.dart`)**: The main library view. It displays a list of MediaMonkey songs. It leverages `vox_player_core` for intelligent search filtering.
+* **`DashboardScreen` (`dashboard_screen.dart`)**: The main library view. It displays a list of MediaMonkey songs. It leverages `vox_player_core` for intelligent search filtering, and actively requests Notification permissions for background audio metadata.
 * **`MedleyBuilderScreen` & `MedleyActiveSessionScreen` (inside `vox_player_core`)**: Screens for orchestrating, previewing, and modifying multi-song sequence medleys.
 * **`AiQueueManagerUi` (inside `vox_player_core`)**: The robust background queue management UI that handles ingestion requests to the Python API server.
-* **`ActiveSessionScreen` (`active_session_screen.dart`)**: The wrapper that passes selected MediaMonkey songs into the `VoxPlayerDashboard` widget from the core library, supplying it with stems, lyrics, and pitch data.
+* **`ActiveSessionScreen` (`active_session_screen.dart`)**: The wrapper that passes selected MediaMonkey songs into the `VoxPlayerDashboard` widget. Now features a responsive, toggleable Playlist Drawer and seamlessly passes song metadata (title/artist) down to `vox_player_core` for lock screen notifications.
 * **`SettingsScreen` (`settings_screen.dart`)**: Engineered as a non-interrupting Modal Dialog rather than a full page route, ensuring that modifying global app settings (like pitch curve colors) does not tear down active practice sessions or audio/lyric engines.
 ---
 

@@ -115,7 +115,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
       
       setState(() {
         if (lyricsDir.isNotEmpty) _currentLyricsDir = lyricsDir;
-        _mediaSource = VoxMediaSource(url: song.directoryPath, isYoutube: true);
+        _mediaSource = VoxMediaSource(url: song.directoryPath, isYoutube: true, title: song.title, artist: song.artist);
         _isLoading = false;
       });
       return;
@@ -159,10 +159,10 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
 
     final File instFile = File(instPath);
     if (await instFile.exists()) {
-      _mediaSource = VoxMediaSource(url: instPath);
+      _mediaSource = VoxMediaSource(url: instPath, title: song.title, artist: song.artist);
     } else {
        if (FileSystemEntity.isFileSync(song.directoryPath)) {
-          _mediaSource = VoxMediaSource(url: song.directoryPath);
+          _mediaSource = VoxMediaSource(url: song.directoryPath, title: song.title, artist: song.artist);
           setState(() => _isLoading = false);
           return;
        }
@@ -342,12 +342,22 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                                   },
                                   tooltip: 'Next Song',
                                 ),
-                                if (widget.onToggleFullScreen != null)
-                                  IconButton(
-                                    icon: const Icon(Icons.fullscreen, color: VoxProTheme.textSecondary),
-                                    onPressed: widget.onToggleFullScreen,
-                                    tooltip: 'Full Screen Mode',
-                                  ),
+                                  if (widget.onToggleFullScreen != null)
+                                    IconButton(
+                                      icon: const Icon(Icons.fullscreen, color: VoxProTheme.textSecondary),
+                                      onPressed: widget.onToggleFullScreen,
+                                      tooltip: 'Full Screen Mode',
+                                    ),
+                                  if (widget.activePlaylist != null)
+                                    IconButton(
+                                      icon: Icon(Icons.queue_music, color: _isPlaylistPinned ? VoxProTheme.accent : VoxProTheme.textSecondary),
+                                      onPressed: () {
+                                        setState(() {
+                                          _isPlaylistPinned = !_isPlaylistPinned;
+                                        });
+                                      },
+                                      tooltip: 'Toggle Playlist',
+                                    ),
                               ],
                             ),
                           ],
@@ -517,17 +527,18 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
   }
 
   Widget _buildPlaylistDrawer() {
+    final double drawerWidth = MediaQuery.of(context).size.width < 400 ? MediaQuery.of(context).size.width * 0.8 : 320;
     return AnimatedPositioned(
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOut,
-      right: (_isHoveringPlaylist || _isPlaylistPinned) ? 0 : -300,
+      right: (_isHoveringPlaylist || _isPlaylistPinned) ? 0 : -drawerWidth,
       top: 0,
       bottom: 0,
       child: MouseRegion(
         onEnter: (_) => setState(() => _isHoveringPlaylist = true),
         onExit: (_) => setState(() => _isHoveringPlaylist = false),
         child: Container(
-          width: 320,
+          width: drawerWidth,
           decoration: BoxDecoration(
             color: VoxProTheme.sidebar.withOpacity(0.95),
             boxShadow: [
