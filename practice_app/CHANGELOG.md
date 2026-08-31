@@ -1,3 +1,6 @@
+## 1.6.4+1
+- Added a "New Window" button to the Dashboard AppBar on Desktop environments, enabling users to launch completely independent concurrent instances of the practice app.
+
 ## 1.6.3+1
 - Fixed the AI Vault Orchestrator bug where Pitch, Vocal Map, and Lyrics indicators were erroneously showing as missing in the UI by ensuring `vox_meta.json` is correctly finalized.
 - Updated `practice_app` to pass song metadata (title/artist) to `vox_player_core` for background notifications.

@@ -989,6 +989,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
               )));
             },
           ),
+          if (Platform.isWindows || Platform.isMacOS || Platform.isLinux)
+            IconButton(
+              icon: const Icon(Icons.open_in_new),
+              tooltip: 'Open New Window',
+              onPressed: () {
+                Process.start(Platform.resolvedExecutable, []);
+              },
+            ),
           const AiQueueStatusIcon(),
           const SizedBox(width: 16),
         ],
