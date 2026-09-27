@@ -12,6 +12,7 @@ class SongListTile extends StatelessWidget {
   final VoidCallback? onRemove;
   final VoidCallback? onRename;
   final VoidCallback? onAddToPlaylist;
+  final VoidCallback? onRelocate;
 
   const SongListTile({
     Key? key,
@@ -21,6 +22,7 @@ class SongListTile extends StatelessWidget {
     this.onRemove,
     this.onRename,
     this.onAddToPlaylist,
+    this.onRelocate,
   }) : super(key: key);
 
   Future<void> _openFolder(String path) async {
@@ -140,6 +142,12 @@ class SongListTile extends StatelessWidget {
                   icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
                   onPressed: onRemove,
                   tooltip: 'Remove from Database',
+                ),
+              if (song.isMissing && song.externalRelativePath != null && onRelocate != null)
+                IconButton(
+                  icon: const Icon(Icons.link_off, color: Colors.orangeAccent),
+                  onPressed: onRelocate,
+                  tooltip: 'Relocate Missing File',
                 ),
               if (!song.isMissing && onAddToPlaylist != null)
                 IconButton(

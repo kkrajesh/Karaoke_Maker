@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
+import 'package:path/path.dart' as p;
 import 'package:permission_handler/permission_handler.dart';
 import '../../services/file_explorer_service.dart';
 import '../theme/voxpro_theme.dart';
@@ -622,6 +623,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
       },
     );
   }
+  
+  Future<void> _relocateFile(Song song) async {
+    FilePickerResult? result = await FilePicker.pickFiles(type: FileType.media);
+    if (result != null && result.files.single.path != null) {
+      final newPath = result.files.single.path!;
+      final root = Platform.isAndroid 
+          ? VoxSettingsService.instance.androidMusicRoot 
+          : VoxSettingsService.instance.windowsMusicRoot;
+      final relativePath = p.relative(newPath, from: root);
+      
+      await VoxAiTrackingService.instance.saveArtifactStatus(
+        mmId: song.mmId ?? '',
+        title: song.title,
+        hasVocals: song.hasVocals,
+        hasInstrumental: song.hasInstrumental,
+        hasPitchData: song.hasPitchProfile,
+        hasVocalMap: song.hasVocalMap,
+        hasLyrics: song.hasNativeLyrics || song.hasEnglishLyrics,
+        externalRelativePath: relativePath,
+      );
+      
+      final service = Provider.of<FileExplorerService>(context, listen: false);
+      service.scanDirectory();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('File relocated successfully!')));
+      }
+    }
+  }
 
   Widget _buildLibraryView(FileExplorerService service) {
     if (service.currentDirectory == null) {
@@ -853,6 +883,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           onRemove: () => service.removeFromLibrary(song.id),
                           onRename: () => _showRenameDialog(context, song),
                           onAddToPlaylist: () => _addToPlaylist(song),
+                          onRelocate: () => _relocateFile(song),
                         );
                       },
                     )
@@ -886,6 +917,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               onReprocess: _showReprocessDialog,
                               onRename: () => _showRenameDialog(context, song),
                               onAddToPlaylist: () => _addToPlaylist(song),
+                              onRelocate: () => _relocateFile(song),
                             );
                           },
                         );

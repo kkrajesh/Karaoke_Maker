@@ -11,6 +11,7 @@ class Song {
   final bool hasEnglishLyrics;
   final bool hasVocalMap;
   final String? mmId; // MediaMonkey ID
+  final String? externalRelativePath; // For EXT_ media
   bool isMissing; // Added to track missing folders
   bool hasPerformanceProfile; // Tracks if sequences have been saved
   final DateTime? dateModified; // Tracks when AI artifacts were updated
@@ -28,6 +29,7 @@ class Song {
     this.hasEnglishLyrics = false,
     this.hasVocalMap = false,
     this.mmId,
+    this.externalRelativePath,
     this.isMissing = false,
     this.hasPerformanceProfile = false,
     this.dateModified,
@@ -53,6 +55,7 @@ class Song {
   factory Song.fromAiArtifact(Map<String, dynamic> row, String aiVaultPath) {
     final String mmId = row['mm_id']?.toString() ?? '';
     final String title = row['title']?.toString() ?? 'Unknown Title';
+    final String? externalPath = row['external_relative_path']?.toString();
     
     DateTime? lastProcessed;
     if (row['last_processed'] != null) {
@@ -64,6 +67,7 @@ class Song {
       title: title,
       directoryPath: aiVaultPath, // Just a placeholder, as the actual paths will be derived using mmId and title
       mmId: mmId,
+      externalRelativePath: externalPath,
       hasInstrumental: row['has_instrumental'] == 1,
       hasVocals: row['has_vocals'] == 1,
       hasPitchProfile: row['has_pitch_data'] == 1,

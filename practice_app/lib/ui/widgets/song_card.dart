@@ -9,8 +9,9 @@ class SongCard extends StatelessWidget {
   final VoidCallback? onRename;
   final void Function(BuildContext, String, String, String)? onReprocess;
   final VoidCallback? onAddToPlaylist;
+  final VoidCallback? onRelocate;
 
-  const SongCard({Key? key, required this.song, required this.onTap, this.onRemove, this.onRename, this.onReprocess, this.onAddToPlaylist}) : super(key: key);
+  const SongCard({Key? key, required this.song, required this.onTap, this.onRemove, this.onRename, this.onReprocess, this.onAddToPlaylist, this.onRelocate}) : super(key: key);
 
   Widget _buildBadge(IconData icon, String label, bool active) {
     return Container(
@@ -138,6 +139,16 @@ class SongCard extends StatelessWidget {
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
                         ),
+                      if (song.isMissing && song.externalRelativePath != null && onRelocate != null) ...[
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.link_off, color: Colors.orangeAccent, size: 20),
+                          onPressed: onRelocate,
+                          tooltip: 'Relocate Missing File',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ],
                     ],
                   ),
                 ],

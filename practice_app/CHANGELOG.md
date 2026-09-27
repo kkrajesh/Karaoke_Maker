@@ -1,3 +1,8 @@
+## 1.6.5+1
+- Added robust case-insensitive path resolution for externally linked songs ensuring cross-platform Android playback compatibility.
+- Added UI support allowing users to relocate missing media files in the dashboard.
+- Pulled in `vox_player_core` 0.5.4 for enhanced media metadata tracking.
+
 ## 1.6.4+1
 - Added a "New Window" button to the Dashboard AppBar on Desktop environments, enabling users to launch completely independent concurrent instances of the practice app.
 

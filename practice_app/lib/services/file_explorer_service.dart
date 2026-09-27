@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:path/path.dart' as p;
 import 'package:vox_player_core/vox_player_core.dart';
 import '../models/song.dart';
 
@@ -69,7 +70,32 @@ class FileExplorerService extends ChangeNotifier {
         final actualDirPath = VoxAiTrackingService.instance.getArtifactDirectory(mmId, title);
         
         final song = Song.fromAiArtifact(row, actualDirPath);
-        song.isMissing = !Directory(song.directoryPath).existsSync();
+        
+        if (song.externalRelativePath != null) {
+          final root = Platform.isAndroid 
+              ? VoxSettingsService.instance.androidMusicRoot 
+              : VoxSettingsService.instance.windowsMusicRoot;
+          
+          // Normalize path separators for cross-platform compatibility (e.g., Windows \ to Android /)
+          final normalizedRelative = song.externalRelativePath!.replaceAll('\\', '/');
+          final absolutePath = p.join(root, normalizedRelative);
+          
+          song.isMissing = !File(absolutePath).existsSync();
+          
+          // Fallback to case-insensitive search on Android if not found
+          if (song.isMissing && Platform.isAndroid) {
+            final resolvedFile = resolveFileCaseInsensitive(root, normalizedRelative);
+            if (resolvedFile != null) {
+              song.isMissing = false;
+              // Update the absolute path dynamically for playback if needed,
+              // though currently playback might rely on the original logic. 
+              // We should probably just rely on this for the 'isMissing' flag 
+              // for now, but also update active_session_screen to use it.
+            }
+          }
+        } else {
+          song.isMissing = !Directory(song.directoryPath).existsSync();
+        }
         
         song.hasPerformanceProfile = PerformanceProfileService.hasProfileSync(song.directoryPath);
         
@@ -156,5 +182,38 @@ class FileExplorerService extends ChangeNotifier {
 
     isLoading = false;
     notifyListeners();
+  }
+
+  static File? resolveFileCaseInsensitive(String rootPath, String relativePath) {
+    try {
+      final parts = relativePath.split('/');
+      Directory current = Directory(rootPath);
+      
+      if (!current.existsSync()) return null;
+      
+      for (int i = 0; i < parts.length; i++) {
+        final part = parts[i];
+        final isLast = i == parts.length - 1;
+        
+        bool found = false;
+        final entities = current.listSync();
+        for (final entity in entities) {
+          final name = entity.path.split(Platform.pathSeparator).last;
+          if (name.toLowerCase() == part.toLowerCase()) {
+            if (isLast && entity is File) {
+              return entity;
+            } else if (!isLast && entity is Directory) {
+              current = entity;
+              found = true;
+              break;
+            }
+          }
+        }
+        if (!found) return null;
+      }
+    } catch (e) {
+      return null;
+    }
+    return null;
   }
 }

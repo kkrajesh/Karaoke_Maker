@@ -7,6 +7,7 @@ import '../theme/voxpro_theme.dart';
 import 'package:vox_player_core/vox_player_core.dart';
 import '../../services/settings_service.dart';
 import 'package:provider/provider.dart';
+import 'package:path/path.dart' as p;
 import '../../services/file_explorer_service.dart';
 class ActiveSessionScreen extends StatefulWidget {
   final Song? selectedSong;
@@ -116,6 +117,41 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
       setState(() {
         if (lyricsDir.isNotEmpty) _currentLyricsDir = lyricsDir;
         _mediaSource = VoxMediaSource(url: song.directoryPath, isYoutube: true, title: song.title, artist: song.artist);
+        _isLoading = false;
+      });
+      return;
+    }
+
+    if (song.externalRelativePath != null) {
+      final root = Platform.isAndroid 
+          ? VoxSettingsService.instance.androidMusicRoot 
+          : VoxSettingsService.instance.windowsMusicRoot;
+      
+      // Normalize path separators for cross-platform compatibility (e.g., Windows \ to Android /)
+      final normalizedRelative = song.externalRelativePath!.replaceAll('\\', '/');
+      String absolutePath = p.join(root, normalizedRelative);
+      
+      if (Platform.isAndroid && !File(absolutePath).existsSync()) {
+        final resolved = FileExplorerService.resolveFileCaseInsensitive(root, normalizedRelative);
+        if (resolved != null) {
+          absolutePath = resolved.path;
+        }
+      }
+      
+      String lyricsDir = '';
+      if (song.mmId != null && song.mmId!.isNotEmpty) {
+        lyricsDir = VoxAiTrackingService.instance.getArtifactDirectory(song.mmId!, song.title);
+        _performanceProfile = await PerformanceProfileService.loadProfile(lyricsDir);
+      }
+      
+      setState(() {
+        if (lyricsDir.isNotEmpty) _currentLyricsDir = lyricsDir;
+        _mediaSource = VoxMediaSource(
+          url: absolutePath, 
+          isYoutube: false, 
+          title: song.title, 
+          artist: song.artist
+        );
         _isLoading = false;
       });
       return;
