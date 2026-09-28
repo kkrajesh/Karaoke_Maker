@@ -43,6 +43,13 @@
 
 # Changelog
 
+## 1.7.0+1
+* Pulled in `vox_player_core` 0.6.0 with major stability fixes for Windows `media_kit` native crash during layout shifts and hot restarts.
+* Fixed Sequence Editor native unmounting crashes by introducing KeyedSubtree stability.
+* Wired up Sequence Editor bottom toolbar shortcut icon for in-place access.
+* Expanded precision Transition Editor preview window to 20 seconds (+/- 10s).
+* Fixed DropdownButton assertion crash when saving a Sequence Editor profile.
+
 ## 1.5.6+1
 * Added support to automatically recall saved YouTube sequences from the AI Vault.
 * Updated FileExplorerService to ingest and filter YouTube videos with saved performance profiles.

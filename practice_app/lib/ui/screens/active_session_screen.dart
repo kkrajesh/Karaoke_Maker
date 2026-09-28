@@ -305,9 +305,9 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (!widget.isFullScreen)
-              Padding(
-                padding: EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 12.0 : 24.0),
+            (!widget.isFullScreen)
+              ? Padding(
+                  padding: EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 12.0 : 24.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -504,7 +504,7 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
               ),
             ],
           ),
-        ),
+        ) : const SizedBox.shrink(),
         Expanded(
             child: Builder(
               builder: (context) {
@@ -514,7 +514,10 @@ class _ActiveSessionScreenState extends State<ActiveSessionScreen> {
                 }
                 
                 return VoxPlayerDashboard(
+                  key: const GlobalObjectKey('active_vox_player'),
                   source: _mediaSource,
+                  isFullScreen: widget.isFullScreen,
+                  onFullScreenChanged: widget.onToggleFullScreen,
                   lyrics: _songLyrics,
                   pitchData: _targetPitchData,
                   vocalMapData: _vocalMapData,

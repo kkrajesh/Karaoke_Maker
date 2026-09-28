@@ -12,6 +12,7 @@ import 'settings_screen.dart';
 import '../widgets/song_card.dart';
 import '../widgets/song_list_tile.dart';
 import 'package:vox_player_core/vox_player_core.dart';
+import 'package:vox_player_core/src/utils/global_ui.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'batch_rename_screen.dart';
 import '../../services/metadata_service.dart';
@@ -964,7 +965,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return AiQueueNotificationListener(
       child: Scaffold(
         drawer: (!isWide && !_isFullScreen) ? Drawer(child: _buildSidebar(context, isWide)) : null,
-        appBar: _isFullScreen ? null : AppBar(
+        appBar: _isFullScreen ? const PreferredSize(preferredSize: Size.zero, child: SizedBox.shrink()) : AppBar(
         backgroundColor: VoxProTheme.sidebar,
         elevation: 0,
         leading: isWide ? MouseRegion(
@@ -1034,17 +1035,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
       body: SafeArea(
-        child: Stack(
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: ValueListenableBuilder<Widget?>(
+          valueListenable: GlobalUI.rightPanelWidget,
+          builder: (context, rightPanel, child) {
+            final mainStack = KeyedSubtree(
+              key: const GlobalObjectKey('dashboard_main_stack'),
+              child: Stack(
+                children: [
+                  Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                AnimatedSize(
-                  duration: const Duration(milliseconds: 200),
-                  curve: Curves.easeInOut,
-                  child: (isWide && _isPinned && !_isFullScreen) ? const SizedBox(width: 250) : const SizedBox.shrink(),
-                ),
-                if (isWide && _isPinned && !_isFullScreen) const VerticalDivider(width: 1, color: VoxProTheme.border),
+                (isWide && _isPinned && !_isFullScreen) ? const SizedBox(width: 250) : const SizedBox.shrink(),
+                (isWide && _isPinned && !_isFullScreen) ? const VerticalDivider(width: 1, color: VoxProTheme.border) : const SizedBox.shrink(),
                 Expanded(
                   child: !_isInit ? const Center(child: CircularProgressIndicator()) : (_selectedIndex == 0
                       ? _buildUnifiedSearchBody()
@@ -1094,9 +1096,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: _buildSidebar(context, isWide),
               ),
           ],
-        )
-      ),
-      floatingActionButton: (_selectedIndex == 1 && !_isFullScreen) ? (screenWidth < 600 ? FloatingActionButton(
+        ),
+        );
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: mainStack),
+            if (rightPanel != null)
+              Container(
+                width: screenWidth * 0.4,
+                decoration: const BoxDecoration(
+                  border: Border(left: BorderSide(color: Colors.white24, width: 1)),
+                  color: VoxProTheme.background,
+                ),
+                child: rightPanel,
+              ),
+          ],
+        );
+      }),
+    ),
+    floatingActionButton: (_selectedIndex == 1 && !_isFullScreen) ? (screenWidth < 600 ? FloatingActionButton(
         onPressed: () {
           Navigator.push(
             context,
