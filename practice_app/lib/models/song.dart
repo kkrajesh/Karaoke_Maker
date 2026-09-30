@@ -17,6 +17,7 @@ class Song {
   final DateTime? dateModified; // Tracks when AI artifacts were updated
 
   String get id => mmId ?? directoryPath.split(Platform.pathSeparator).last;
+  bool get isExternal => externalRelativePath != null && externalRelativePath!.isNotEmpty;
 
   Song({
     required this.title,

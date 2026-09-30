@@ -1163,7 +1163,7 @@ packages:
       path: "../../vox_player_core"
       relative: true
     source: path
-    version: "0.6.0"
+    version: "0.7.0"
   wakelock_plus:
     dependency: transitive
     description:

@@ -13,25 +13,26 @@ class SongCard extends StatelessWidget {
 
   const SongCard({Key? key, required this.song, required this.onTap, this.onRemove, this.onRename, this.onReprocess, this.onAddToPlaylist, this.onRelocate}) : super(key: key);
 
-  Widget _buildBadge(IconData icon, String label, bool active) {
+  Widget _buildBadge(IconData icon, String label, bool active, {Color? customColor}) {
+    final color = customColor ?? VoxProTheme.accent;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: active ? VoxProTheme.accent.withOpacity(0.1) : VoxProTheme.background,
-        border: Border.all(color: active ? VoxProTheme.accent.withOpacity(0.5) : VoxProTheme.border),
+        color: active ? color.withOpacity(0.1) : VoxProTheme.background,
+        border: Border.all(color: active ? color.withOpacity(0.5) : VoxProTheme.border),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: active ? VoxProTheme.accent : VoxProTheme.textSecondary),
+          Icon(icon, size: 12, color: active ? color : VoxProTheme.textSecondary),
           const SizedBox(width: 4),
           Text(
             label,
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.bold,
-              color: active ? VoxProTheme.accent : VoxProTheme.textSecondary,
+              color: active ? color : VoxProTheme.textSecondary,
             ),
           ),
         ],
@@ -161,6 +162,7 @@ class SongCard extends StatelessWidget {
                   _buildBadge(Icons.multitrack_audio, 'AUDIO', song.hasInstrumental),
                   _buildBadge(Icons.show_chart, 'PITCH', song.hasPitchProfile),
                   _buildBadge(Icons.lyrics, 'LYRICS', song.hasEnglishLyrics || song.hasNativeLyrics),
+                  if (song.isExternal) _buildBadge(Icons.link, 'EXTERNAL', true, customColor: Colors.deepOrangeAccent),
                 ],
               ),
             ],

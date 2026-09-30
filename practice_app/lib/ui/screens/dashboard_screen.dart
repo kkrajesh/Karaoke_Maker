@@ -45,6 +45,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool? _filterMap;
   bool? _filterLyrics;
   bool? _filterProfile;
+  bool? _filterExternal;
   String _currentSortMode = 'Date Modified'; // default to newest updated first as requested
   
   Playlist? _editingPlaylist;
@@ -795,6 +796,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     _buildTriStateChip('Lyrics', _filterLyrics, (v) => setState(() => _filterLyrics = v), VoxProTheme.lyricsAccent),
                     const SizedBox(width: 8),
                     _buildTriStateChip('Profile', _filterProfile, (v) => setState(() => _filterProfile = v), VoxProTheme.accent),
+                    const SizedBox(width: 8),
+                    _buildTriStateChip('External', _filterExternal, (v) => setState(() => _filterExternal = v), Colors.deepOrangeAccent),
                   ],
                 ),
               ),
@@ -851,6 +854,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             if (_filterProfile == true) filteredSongs = filteredSongs.where((s) => s.hasPerformanceProfile).toList();
             if (_filterProfile == false) filteredSongs = filteredSongs.where((s) => !s.hasPerformanceProfile).toList();
                 
+            if (_filterExternal == true) filteredSongs = filteredSongs.where((s) => s.isExternal).toList();
+            if (_filterExternal == false) filteredSongs = filteredSongs.where((s) => !s.isExternal).toList();
+
             if (_currentSortMode == 'Title') {
               filteredSongs.sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
             } else if (_currentSortMode == 'Date Modified') {

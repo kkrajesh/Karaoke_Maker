@@ -90,6 +90,19 @@ class SongListTile extends StatelessWidget {
                   decoration: BoxDecoration(color: Colors.red.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
                   child: const Text('Missing', style: TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.bold)),
                 ),
+              if (song.isExternal)
+                Container(
+                  margin: const EdgeInsets.only(left: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(color: Colors.deepOrangeAccent.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.link, color: Colors.deepOrangeAccent, size: 12),
+                      SizedBox(width: 4),
+                      Text('External', style: TextStyle(color: Colors.deepOrangeAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
             ],
           ),
           subtitle: Wrap(
