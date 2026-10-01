@@ -144,6 +144,7 @@ This project is executed in **Linear Incremental Phases**. Each phase must be ve
 - [x] Fix empty library handling on mobile when local database has not ingested items natively yet.
 - [x] Fix the AI Vault Orchestrator bug where Pitch, Vocal Map, and Lyrics indicators were erroneously showing as missing in the UI.
 - [x] Add filtering capability and visual badging for 'External Linked' songs in the Practice App Dashboard.
+- [x] Engineered Advanced Lyrics Editor in `vox_player_core` side-panel with interactive active-line syncing, nudge, and proportional split/merge capabilities.
 
 ---
 
