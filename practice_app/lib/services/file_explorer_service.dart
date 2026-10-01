@@ -145,6 +145,12 @@ class FileExplorerService extends ChangeNotifier {
           final hasMap = files.any((f) => f.contains('vocal_map.json'));
           final hasLyrics = files.any((f) => f.contains('lyrics') && (f.endsWith('.lrc') || f.endsWith('.txt')));
           final hasProfile = files.any((f) => f.contains('performance_profiles.json'));
+          
+          final hasOriginal = files.any((f) => f.contains('original.'));
+
+          if (!hasInst && !hasVocals && !hasOriginal) {
+            continue; // Not a valid audio directory
+          }
 
           final stat = dir.statSync();
 

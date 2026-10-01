@@ -34,10 +34,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _searchQuery = '';
   
   bool _isFullScreen = false;
-  bool _isPinned = true;
+  bool _isPinned = false;
   bool _isHoveringSidebar = false;
   bool _isHoveringMenuIcon = false;
-  bool _priorWideState = true;
+  bool _priorWideState = false;
   bool? _wasWide;
   bool? _filterVocals;
   bool? _filterInst;
@@ -146,18 +146,38 @@ class _DashboardScreenState extends State<DashboardScreen> {
       onExit: (_) => setState(() => _isHoveringSidebar = false),
       child: Container(
         width: 250,
-        color: VoxProTheme.sidebar,
+        decoration: BoxDecoration(
+          color: VoxProTheme.sidebar,
+          boxShadow: [
+            if (!_isPinned) const BoxShadow(color: Colors.black54, blurRadius: 15, offset: Offset(5, 0))
+          ],
+        ),
         child: Column(
           children: [
-            const SizedBox(height: 16),
-            _buildSidebarItem(context, isWide, Icons.search, 'Search', 0),
-            _buildSidebarItem(context, isWide, Icons.library_music, 'Library', 1),
-            _buildSidebarItem(context, isWide, Icons.featured_play_list, 'Playlists', 4),
-            _buildSidebarItem(context, isWide, Icons.mic, 'Active Session', 2),
-            _buildSidebarItem(context, isWide, Icons.timer, 'Sleep Timer', 5, isDialog: true),
+            const SizedBox(height: 32),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              alignment: Alignment.centerLeft,
+              child: const Text(
+                'KARAOKE PRO',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 2.0,
+                  color: VoxProTheme.textPrimary,
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            _buildSidebarItem(context, isWide, Icons.search_rounded, 'Search', 0),
+            _buildSidebarItem(context, isWide, Icons.library_music_rounded, 'Library', 1),
+            _buildSidebarItem(context, isWide, Icons.featured_play_list_rounded, 'Playlists', 4),
+            _buildSidebarItem(context, isWide, Icons.mic_rounded, 'Active Session', 2),
+            _buildSidebarItem(context, isWide, Icons.timer_rounded, 'Sleep Timer', 5, isDialog: true),
             const Spacer(),
-            _buildSidebarItem(context, isWide, Icons.settings, 'Settings', 3, isDialog: true),
-            const SizedBox(height: 16),
+            const Divider(color: VoxProTheme.border, indent: 20, endIndent: 20),
+            _buildSidebarItem(context, isWide, Icons.settings_rounded, 'Settings', 3, isDialog: true),
+            const SizedBox(height: 24),
           ],
         ),
       ),
@@ -166,35 +186,76 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildSidebarItem(BuildContext context, bool isWide, IconData icon, String title, int index, {bool isDialog = false}) {
     final isActive = !isDialog && _selectedIndex == index;
-    return ListTile(
-      leading: Icon(icon, color: isActive ? VoxProTheme.accent : VoxProTheme.textSecondary),
-      title: Text(
-        title,
-        style: TextStyle(
-          color: isActive ? VoxProTheme.accent : VoxProTheme.textSecondary,
-          fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-        ),
-      ),
-      selected: isActive,
-      onTap: () {
-        if (!isWide) {
-          Navigator.pop(context); // Close drawer
-        }
-        if (isDialog && index == 3) {
-          showDialog(
-            context: context,
-            builder: (context) => const SettingsScreen(),
-          );
-          return;
-        }
-        if (isDialog && index == 5) {
-          _showSleepTimerDialog(context);
-          return;
-        }
-        setState(() {
-          _selectedIndex = index;
-        });
-      },
+    return StatefulBuilder(
+      builder: (context, setState) {
+        bool isHovered = false;
+        return MouseRegion(
+          onEnter: (_) => setState(() => isHovered = true),
+          onExit: (_) => setState(() => isHovered = false),
+          child: GestureDetector(
+            onTap: () {
+              if (!isWide) {
+                Navigator.pop(context); // Close drawer
+              }
+              if (isDialog && index == 3) {
+                showDialog(
+                  context: context,
+                  builder: (context) => const SettingsScreen(),
+                );
+                return;
+              }
+              if (isDialog && index == 5) {
+                _showSleepTimerDialog(context);
+                return;
+              }
+              this.setState(() {
+                _selectedIndex = index;
+              });
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeInOut,
+              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                color: isActive
+                    ? VoxProTheme.accent.withValues(alpha: 0.15)
+                    : (isHovered ? Colors.white.withValues(alpha: 0.05) : Colors.transparent),
+                border: Border.all(
+                  color: isActive ? VoxProTheme.accent.withValues(alpha: 0.5) : Colors.transparent,
+                  width: 1,
+                ),
+                boxShadow: isActive
+                    ? [BoxShadow(color: VoxProTheme.accent.withValues(alpha: 0.1), blurRadius: 8, spreadRadius: 1)]
+                    : [],
+              ),
+              child: Row(
+                children: [
+                  AnimatedScale(
+                    scale: isHovered || isActive ? 1.1 : 1.0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Icon(
+                      icon,
+                      color: isActive ? VoxProTheme.accent : (isHovered ? Colors.white : VoxProTheme.textSecondary),
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: isActive ? VoxProTheme.accent : (isHovered ? Colors.white : VoxProTheme.textSecondary),
+                      fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                      fontSize: 15,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
     );
   }
 
@@ -958,7 +1019,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final isWide = screenWidth > 800;
     
     if (_wasWide == null) {
-      _isPinned = isWide;
+      _isPinned = false; // unpinned by default
     } else {
       if (_wasWide! && !isWide) {
         _isPinned = false;

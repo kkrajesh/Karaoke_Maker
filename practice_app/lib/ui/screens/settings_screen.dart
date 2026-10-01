@@ -229,7 +229,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final settings = Provider.of<SettingsService>(context);
 
     return DefaultTabController(
-      length: 4,
+      length: 5,
       child: AlertDialog(
         backgroundColor: VoxProTheme.cardBg,
         title: const Text('Settings'),
@@ -250,6 +250,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 unselectedLabelColor: VoxProTheme.textSecondary,
                 tabs: [
                   Tab(text: 'Visualizer'),
+                  Tab(text: 'Player'),
                   Tab(text: 'Paths'),
                   Tab(text: 'Admin'),
                   Tab(text: 'Services'),
@@ -296,7 +297,82 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ],
                       ),
                     ),
-                    // Tab 2: Paths
+                    // Tab 2: Player & Lyrics
+                    SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 16),
+                          const Text('Lyrics Overlay Settings', style: TextStyle(color: VoxProTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              const Text('Native Font Scale:', style: TextStyle(color: Colors.white70)),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Slider(
+                                  value: VoxSettingsService.instance.nativeLyricsScale,
+                                  min: 0.5,
+                                  max: 2.0,
+                                  divisions: 15,
+                                  label: '${VoxSettingsService.instance.nativeLyricsScale.toStringAsFixed(1)}x',
+                                  activeColor: VoxProTheme.accent,
+                                  onChanged: (val) {
+                                    setState(() => VoxSettingsService.instance.setNativeLyricsScale(val));
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            children: [
+                              const Text('English Font Scale:', style: TextStyle(color: Colors.white70)),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Slider(
+                                  value: VoxSettingsService.instance.englishLyricsScale,
+                                  min: 0.5,
+                                  max: 2.0,
+                                  divisions: 15,
+                                  label: '${VoxSettingsService.instance.englishLyricsScale.toStringAsFixed(1)}x',
+                                  activeColor: VoxProTheme.accent,
+                                  onChanged: (val) {
+                                    setState(() => VoxSettingsService.instance.setEnglishLyricsScale(val));
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                          SwitchListTile(
+                            title: const Text('Use Custom Overlay Colors', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                            subtitle: const Text('Override singer-specific colors with chosen colors', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                            value: VoxSettingsService.instance.useCustomOverlayColors,
+                            onChanged: (val) {
+                              setState(() => VoxSettingsService.instance.setUseCustomOverlayColors(val));
+                            },
+                            contentPadding: EdgeInsets.zero,
+                            activeColor: VoxProTheme.accent,
+                          ),
+                          if (VoxSettingsService.instance.useCustomOverlayColors) ...[
+                            const SizedBox(height: 16),
+                            _buildColorSection(
+                              context,
+                              title: 'Native Lyrics Color',
+                              currentColor: Color(VoxSettingsService.instance.nativeLyricsColor),
+                              onColorSelected: (c) => setState(() => VoxSettingsService.instance.setNativeLyricsColor(c.value)),
+                            ),
+                            const SizedBox(height: 24),
+                            _buildColorSection(
+                              context,
+                              title: 'English Lyrics Color',
+                              currentColor: Color(VoxSettingsService.instance.englishLyricsColor),
+                              onColorSelected: (c) => setState(() => VoxSettingsService.instance.setEnglishLyricsColor(c.value)),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    // Tab 3: Paths
                     SingleChildScrollView(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,

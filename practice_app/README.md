@@ -5,6 +5,11 @@ VoxPro (the `practice_app`) is the frontend Flutter desktop application for the 
 > [!NOTE]
 > As of **Phase 5**, the core UI, audio playback, pitch tracking, and lyrics parsing have been modularized and moved into the shared `vox_player_core` package. The `practice_app` now acts as a thin client shell that mounts the `VoxPlayerDashboard` and `UnifiedSearchUI`.
 
+## 🚀 Release Notes (v1.8.3)
+- **Modern Sidebar**: Upgraded the main sidebar with modern design components, smooth micro-animations, and unpinned it by default.
+- **Dynamic Lyrics Settings**: Added options in the settings page to override active lyrics font scale and colors, differentiating between native and english overlay layers.
+- **Precision Lyrics Editor**: Switched lyrics editor sync tracking to a robust `Scrollable.ensureVisible` implementation. The tracking toggle now intelligently responds and disables itself upon user interactions or manual edits.
+
 ## 🚀 Release Notes (v1.5.8)
 - **Medley Drafts Integration**: Inherited Medley Draft saving, loading, and unsaved changes tracking from `vox_player_core` v0.4.7.
 

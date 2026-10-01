@@ -1,3 +1,11 @@
+## 1.8.3+1
+- Upgraded main sidebar UI with modern design elements, animations, and transitions.
+- Made the main sidebar unpinned by default.
+- Active session lyrics: native lyrics are now larger and english lyrics are smaller.
+- Settings page: Added options to adjust relative font sizes and colors for lyrics.
+- Lyrics editor: Added "sync scroll to active" toggle which accurately tracks the active line and auto-disables on manual scroll or edits.
+- Fixed lyrics editor auto-scrolling past the active window by using exact key-based scroll alignments.
+
 ## 1.6.5+1
 - Added robust case-insensitive path resolution for externally linked songs ensuring cross-platform Android playback compatibility.
 - Added UI support allowing users to relocate missing media files in the dashboard.
